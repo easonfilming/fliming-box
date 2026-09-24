@@ -404,6 +404,38 @@ public class Bridge implements Importer.Callback, Capture.Callback {
         }
     }
 
+    /** 清空所有照片文件。元数据由 JS 侧清 —— 只清元数据而文件还在的话，
+     *  「清空全部数据」就是假的。 */
+    @JavascriptInterface
+    public void wipeFiles() {
+        io.execute(() -> {
+            int n = 0;
+            n += wipeDir(photos.photos);
+            n += wipeDir(photos.thumbs);
+            n += wipeDir(photos.originals);
+            n += wipeDir(photos.gear);
+            n += wipeDir(photos.tmp);
+            Log.i(TAG, "清空文件 " + n + " 个");
+            JSONObject r = new JSONObject();
+            try {
+                r.put("deleted", n);
+            } catch (JSONException ignored) {}
+            call("onPhotosDeleted", r.toString());
+        });
+    }
+
+    /** 递归删目录内容，但保留目录本身。 */
+    private static int wipeDir(File dir) {
+        File[] kids = dir.listFiles();
+        if (kids == null) return 0;
+        int n = 0;
+        for (File f : kids) {
+            if (f.isDirectory()) n += wipeDir(f);
+            if (f.delete()) n++;
+        }
+        return n;
+    }
+
     private static boolean deleteQuietly(File f) {
         try {
             return f.isFile() && f.delete();

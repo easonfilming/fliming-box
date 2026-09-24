@@ -1460,6 +1460,86 @@ h1{
   text-align:center;
 }
 
+/* 接触印相。深底 + 片基行 + 上下齿孔 + 连续格号 */
+.cs{
+  display:flex;
+  flex-direction:column;
+  /* 让每条片基缩到内容宽度 —— 末行不满 8 格时应该是一截短胶片，
+     而不是铺满整宽的空白片基 */
+  align-items:flex-start;
+  gap:6px;
+  padding:10px 12px;
+  background:#140F09;
+}
+.cs-strip{
+  background:linear-gradient(180deg,#33240F,#4A3418 13%,#3A2812 87%,#33240F);
+  border-radius:2px;
+}
+.cs-perf{
+  height:9px;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='19'%3E%3Crect x='4' y='4.5' width='15.5' height='10' rx='2.6' fill='%23F1E7D7' fill-opacity='0.9'/%3E%3C/svg%3E");
+  background-repeat:repeat-x;
+  background-size:13px 9px;
+  background-position:center;
+}
+.cs-frames{display:flex;gap:4px;padding:0 7px}
+.cs-cell{flex:0 0 auto;display:flex;flex-direction:column;gap:3px}
+.cs-f{
+  overflow:hidden;
+  background:#0E0A06;
+  box-shadow:inset 0 0 0 1px rgba(0,0,0,.5);
+}
+.cs-f img.ph, .cs-f svg{display:block;width:100%;height:100%;object-fit:cover}
+.cs-num{
+  font-family:"Space Mono", monospace;
+  font-size:9px;
+  letter-spacing:.08em;
+  color:var(--am);
+  text-align:center;
+  line-height:1;
+  opacity:.9;
+}
+.cs-more{
+  display:grid;
+  place-items:center;
+  background:rgba(229,160,58,.14);
+  color:var(--am);
+  font-family:"Space Mono", monospace;
+  font-size:10px;
+}
+.cs-empty{
+  width:100%;
+  padding:34px 0;
+  text-align:center;
+  color:var(--tx3);
+  font-size:12px;
+}
+
+/* 空状态。四个 Tab 都要有 —— 空白开始之后，没数据的页面不能是一片空白，
+   否则看起来像坏了。 */
+.emptybox{
+  text-align:center;
+  padding:52px 26px 58px;
+  color:var(--tx3);
+}
+.emptyt{
+  font-family:"Noto Serif SC","Songti SC",serif;
+  font-size:17px;
+  color:var(--tx2);
+  margin-bottom:12px;
+  letter-spacing:.02em;
+}
+.emptyh{
+  font-size:12.5px;
+  line-height:2;
+  margin-bottom:24px;
+}
+.emptybox .btn{
+  display:inline-flex;
+  width:auto;
+  padding:10px 24px;
+}
+
 /* 线稿选择器 */
 .illusgrid{
   display:grid;
@@ -2169,6 +2249,16 @@ var Native = (function(){
       if (isNative && raw.cutoutEnd) raw.cutoutEnd();
     },
 
+    /* 清空所有照片文件（元数据由 JS 侧清）。 */
+    wipeFiles: function(){
+      if (isNative && raw.wipeFiles) { raw.wipeFiles(); return; }
+      Object.keys(browserPhotos).forEach(function(k){ URL.revokeObjectURL(browserPhotos[k]); });
+      Object.keys(browserGear).forEach(function(k){ URL.revokeObjectURL(browserGear[k]); });
+      browserPhotos = {};
+      browserGear = {};
+      window.__bridge.onPhotosDeleted(JSON.stringify({ deleted: 0 }));
+    },
+
     /* 从相册选一张（不是拍照）。浏览器里复用文件选择。 */
     pickPhoto: function(purpose){
       if (isNative && raw.pickPhoto) { raw.pickPhoto(JSON.stringify({ purpose: purpose })); return; }
@@ -2368,7 +2458,7 @@ var I = {
    ============================================================ */
 function S(loc, from, to){ return {loc:loc, from:from, to:to}; }
 
-var ROLLS = [
+var SAMPLE_ROLLS = [
   { id:'r8', film:'KODAK PORTRA 400', stock:'Portra 400', spec:'135', iso:400, scene:'lake',
     camera:'Nikon FM2', lens:'Nikkor 50mm f/1.4', dev:'苏州 · 平江冲扫', devDate:'2026-09-16',
     source:'scanner', sourceModel:'Plustek OpticFilm 8200i',
@@ -2426,7 +2516,7 @@ var ROLLS = [
     folder:null, segs:[S('哈尔滨 · 中央大街',0,11)] }
 ];
 
-var GEAR = [
+var SAMPLE_GEAR = [
   {id:'g1', kind:'body', name:'Nikon FM2', sub:'F 卡口 · 1989', rolls:14, ill:'slr'},
   {id:'g2', kind:'body', name:'Leica M6 Classic', sub:'M 卡口 · 1992', rolls:9, ill:'rf'},
   {id:'g3', kind:'body', name:'Mamiya RB67 Pro SD', sub:'中画幅 6×7 · 1990', rolls:5, ill:'slr'},
@@ -2438,7 +2528,7 @@ var GEAR = [
   {id:'g9', kind:'lens', name:'Nikkor 105mm f/2.5', sub:'F 卡口 · 1971', rolls:4, ill:'lens'}
 ];
 
-var STOCK = [
+var SAMPLE_STOCK = [
   {name:'ILFORD DELTA 3200', spec:'135', iso:3200, qty:2,  exp:'2026-09'},
   {name:'KODAK EKTAR 100',   spec:'135', iso:100,  qty:1,  exp:'2026-10'},
   {name:'FUJI PRO 400H',     spec:'120', iso:400,  qty:2,  exp:'2026-11'},
@@ -2448,9 +2538,31 @@ var STOCK = [
   {name:'ILFORD HP5 PLUS',   spec:'135', iso:400,  qty:10, exp:'2028-03'}
 ];
 
+/* ============================================================
+   运行时数据
+   ============================================================
+   首次启动是**空的**。上面那三份 SAMPLE_* 只是模板，不会自动写入 ——
+   这是个用来记自己胶卷的工具，一上来塞 11 卷别人的胶卷、9 件别人的器材，
+   只会让用户先做一轮删除才能开始用。
+   想看填充效果的话，设置里有「载入示例数据」。
+   ============================================================ */
+var ROLLS = [];
+var GEAR = [];
+var STOCK = [];
 var FOLDERS = [];
-ROLLS.forEach(function(r){ if(r.folder && FOLDERS.indexOf(r.folder) < 0) FOLDERS.push(r.folder); });
-FOLDERS.sort();
+
+/** 把示例数据装进来。深拷贝 —— 直接引用的话，用户改了数据会污染模板，
+ *  下次再载入拿到的就是改过的那份。 */
+function loadSamples(){
+  ROLLS = JSON.parse(JSON.stringify(SAMPLE_ROLLS));
+  GEAR  = JSON.parse(JSON.stringify(SAMPLE_GEAR));
+  STOCK = JSON.parse(JSON.stringify(SAMPLE_STOCK));
+  FOLDERS = [];
+  ROLLS.forEach(function(r){
+    if (r.folder && FOLDERS.indexOf(r.folder) < 0) FOLDERS.push(r.folder);
+  });
+  FOLDERS.sort();
+}
 
 var TODAY = new Date(2026, 8, 24);
 
@@ -2587,19 +2699,58 @@ function stripHTML(roll, fw){
   '</div>';
 }
 
-function miniStrip(roll, n){
-  var fr = frames(roll).slice(0, n || 5);
-  var fw = roll.spec === '120' ? 88 : 92;
-  var fh = roll.spec === '120' ? 88 : 61;
-  var h = '';
-  for(var i=0;i<fr.length;i++){
-    h += '<span class="mini-f" style="width:' + fw + 'px;height:' + fh + 'px">' + frameInner(roll, fr[i], 'thumbs') + '</span>';
+/* ============================================================
+   接触印相（contact sheet）
+   ============================================================
+   一整卷按 8 格一行铺开，像冲洗店给的那种印样 —— 一眼能看出这卷有多少张、
+   大致拍了什么。卡片预览和导出预览共用这份渲染；导出大图是 canvas 版，
+   布局跟这里对齐。
+   ============================================================ */
+var CS_PER_ROW = 8;
+
+function contactSheetHTML(roll, fw, maxRows, showNums){
+  var fr = frames(roll);
+  if (!fr.length) return '<div class="cs"><div class="cs-empty">还没有照片</div></div>';
+
+  var PER = CS_PER_ROW;
+  var cap = maxRows ? PER * maxRows : Infinity;
+  var trunc = fr.length > cap;
+  var cells = [];
+  var n = trunc ? cap - 1 : fr.length;   // 截断时留一格给 "+N"
+  for (var i = 0; i < n; i++) cells.push({ fr: fr[i], more: 0 });
+  if (trunc) cells.push({ fr: null, more: fr.length - n });
+
+  var fh = roll.spec === '120' ? fw : Math.round(fw * 2 / 3);
+  var rows = Math.ceil(cells.length / PER);
+  var out = '';
+
+  for (var r = 0; r < rows; r++) {
+    out += '<div class="cs-strip">';
+    out += '<div class="cs-perf"></div>';
+    out += '<div class="cs-frames">';
+    for (var c = 0; c < PER; c++) {
+      var k = r * PER + c;
+      if (k >= cells.length) break;
+      var cell = cells[k];
+      if (cell.fr) {
+        out += '<div class="cs-cell">' +
+          '<div class="cs-f" style="width:' + fw + 'px;height:' + fh + 'px">' +
+            frameInner(roll, cell.fr, 'thumbs') +
+          '</div>' +
+          (showNums ? '<div class="cs-num">' + esc(cell.fr.label) + '</div>' : '') +
+        '</div>';
+      } else {
+        out += '<div class="cs-cell">' +
+          '<div class="cs-f cs-more" style="width:' + fw + 'px;height:' + fh + 'px">+' +
+            cell.more + '</div>' +
+        '</div>';
+      }
+    }
+    out += '</div>';
+    out += '<div class="cs-perf"></div>';
+    out += '</div>';
   }
-  return '<span class="mini">' +
-    '<span class="perf top"></span>' +
-    '<span class="mini-frames">' + h + '</span>' +
-    '<span class="perf bot"></span>' +
-  '</span>';
+  return '<div class="cs">' + out + '</div>';
 }
 
 /* ============================================================
@@ -2687,6 +2838,15 @@ var TABS = [
 /* ============================================================
    views
    ============================================================ */
+/** 空状态。lines 是若干行说明文字。 */
+function emptyState(title, lines, actLabel, act){
+  return '<div class="emptybox">' +
+    '<div class="emptyt">' + esc(title) + '</div>' +
+    '<div class="emptyh">' + lines.map(function(x){ return esc(x); }).join('<br>') + '</div>' +
+    (act ? '<button class="btn" data-act="' + act + '">' + esc(actLabel) + '</button>' : '') +
+    '</div>';
+}
+
 function viewFilmList(){
   var list = ROLLS.filter(function(r){ return !state.folder || r.folder === state.folder; });
   var body = '';
@@ -2696,7 +2856,7 @@ function viewFilmList(){
     body = list.map(function(r){
       var segs = r.segs.map(function(s){ return s.loc; }).join(' · ');
       return '<button class="card" data-act="roll" data-id="' + r.id + '">' +
-        miniStrip(r, 5) +
+        contactSheetHTML(r, 36, 3) +
         '<span class="card-b">' +
           '<span class="card-r1"><span class="filmname">' + esc(r.film) + '</span>' +
             '<span class="specbadge">' + r.spec + '</span></span>' +
@@ -2735,6 +2895,13 @@ function viewFilmList(){
         }).join('') +
       '</div>';
     }).join('');
+  }
+
+  if (!ROLLS.length) {
+    body = emptyState('还没有胶卷', [
+      '导入一卷底片，它会拼成一整张长条，可以横向拖动、分段标记拍摄地点。',
+      '所有数据都留在这台设备上，不联网。'
+    ], '新建第一卷', 'newRoll');
   }
 
   var chips = '<button class="chip" data-act="folder" data-f="" aria-pressed="' + (state.folder === null) + '">全部</button>' +
@@ -2883,7 +3050,12 @@ function viewCalendar(){
       '</span>' +
       '<span class="rowend">' + I.right + '</span>' +
     '</button>';
-  }).join('') : '<p style="font-size:12.5px;color:var(--tx3);text-align:center;padding:26px 0;margin:0">这一天没有拍摄记录</p>';
+  }).join('') : (ROLLS.length
+      ? '<p style="font-size:12.5px;color:var(--tx3);text-align:center;padding:26px 0;margin:0">这一天没有拍摄记录</p>'
+      : emptyState('还没有拍摄记录', [
+          '胶卷的拍摄日期会自动进到日历里，点某一天就能跳到对应的胶卷。',
+          '下方柱状图统计每个月的拍摄量。'
+        ], '新建第一卷', 'newRoll'));
 
   var counts = new Array(12).fill(0);
   ROLLS.forEach(function(r){
@@ -2967,7 +3139,12 @@ function viewGear(){
         '<button data-act="gearkind" data-k="lens" aria-pressed="' + (state.gearKind === 'lens') + '">镜头</button>' +
       '</div>' +
     '</div>' +
-    '<div class="geargrid">' + cards + '</div>' +
+    (GEAR.length
+      ? '<div class="geargrid">' + cards + '</div>'
+      : emptyState('还没有登记设备', [
+          '拍一张机身或镜头，点一下主体就能把背景抠掉。',
+          '也可以先挑一个线稿占位，之后随时换成真图。'
+        ], '登记第一件设备', 'addGear')) +
     '<div style="height:84px"></div>';
 }
 
@@ -3007,7 +3184,12 @@ function viewStock(){
       '<div class="warn"><div class="k">临近过期</div><div class="v">' + urgent + '</div></div>' +
     '</div>' +
     '<div class="sorthint">' + I.sortup + '按过期时间由近到远 · 临近过期优先展示</div>' +
-    '<div class="stocklist">' + rows + '</div>' +
+    (STOCK.length
+      ? '<div class="stocklist">' + rows + '</div>'
+      : emptyState('库存是空的', [
+          '记录每款胶卷的数量和过期时间，列表会按过期时间由近到远排序。',
+          '新增时可以从 29 款热门胶卷预设里点选，规格和 ISO 一次填好。'
+        ], '登记第一款胶卷', 'addStock')) +
     '<div style="height:84px"></div>';
 }
 
@@ -3238,7 +3420,7 @@ function sheetOverview(rollId){
   var r = rollById(rollId);
   return '<div class="grab"></div>' +
     '<h3>胶卷总览大图</h3>' +
-    '<p class="sh-sub">整卷底片拼为一张长图，带片头信息与分段地点标注，可横向查看。</p>' +
+    '<p class="sh-sub">整卷按 8 格一行铺成接触印相，像冲洗店给的那种印样 —— 一眼看完这卷。</p>' +
     '<div class="poster">' +
       '<div class="poster-hd">' +
         '<div style="min-width:0">' +
@@ -3248,12 +3430,12 @@ function sheetOverview(rollId){
         '</div>' +
         '<div class="pn">' + r.spec + '<br>ISO ' + r.iso + '<br>' + r.count + ' EXP</div>' +
       '</div>' +
-      '<div class="stripwrap">' + stripHTML(r, 74) + '</div>' +
+      contactSheetHTML(r, 34, 6, true) +
       '<div class="poster-ft"><span>' + r.segs.length + ' 段 · ' +
         r.segs.map(function(s){ return s.loc; }).join(' / ') + '</span><span>菲林档案</span></div>' +
     '</div>' +
     '<div class="exportmeta">' +
-      '<span>最长 6000 px 宽</span><span>JPG</span><span>' + srcLabel(r.source) + '</span><span>含地点标注</span>' +
+      '<span>8 格一行 · 整卷铺开</span><span>JPG</span><span>' + srcLabel(r.source) + '</span><span>含地点标注</span>' +
     '</div>' +
     '<div class="sheet-actions">' +
       '<button class="btn ghost" data-act="closeSheet">取消</button>' +
@@ -3498,6 +3680,12 @@ function newCanvas(w, h){
 /** 没有真实照片时的兜底：把合成 SVG 转成图片再画。 */
 function fallbackImage(roll, fr){
   var svg = sceneSVG(roll.scene, fr.seed);
+  // sceneSVG 生成的 <svg> 没有 xmlns —— 内联在 HTML 里时命名空间是隐含的，
+  // 但作为独立图片（data URL）加载时必须显式声明，否则浏览器不认这个 SVG，
+  // <img> 直接触发 onerror。这条路径只在没有真实照片的卷上走到。
+  if (svg.indexOf('xmlns') < 0) {
+    svg = svg.replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" ');
+  }
   var url = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
   return loadPhoto(url);
 }
@@ -3587,12 +3775,23 @@ function exportBorderToAlbum(rollId, idx, style){
   frameImage(r, fr, 'photos').then(function(img){
     var c = renderBorder(r, idx, style, img);
     var dataUrl = c.toDataURL('image/jpeg', 0.92);
-    var name = Exporter_safeName(r.film + '_' + (fr.label || (idx + 1)) + '_' + (style || 'cream'));
+    var name = Exporter_safeName(r.film + '_' + (fr.label || (idx + 1)) +
+                                  '_' + (style || 'cream') + exportStamp());
     Native.saveToAlbum(dataUrl, name);
   }).catch(function(e){
     Native.log('error', '边框导出失败: ' + (e && e.message));
     toast('生成失败：' + (e && e.message));
   });
+}
+
+/** 导出文件名的时间戳后缀。
+ *  同一个卷导出两次时，MediaStore 会因为 DISPLAY_NAME 在同一目录下重复而
+ *  直接抛 UNIQUE constraint —— 它不会自动改名。 */
+function exportStamp(){
+  var d = new Date();
+  return '_' + ('0' + d.getHours()).slice(-2) +
+               ('0' + d.getMinutes()).slice(-2) +
+               ('0' + d.getSeconds()).slice(-2);
 }
 
 function Exporter_safeName(s){
@@ -3601,87 +3800,124 @@ function Exporter_safeName(s){
 
 /* ---------- 整卷总览大图 ---------- */
 
+/* 整卷总览大图：接触印相。布局跟 contactSheetHTML 对齐 ——
+   预览和导出结果看起来要是同一张东西。 */
 function renderOverview(roll, imgs){
   var N = imgs.length;
   if (!N) return null;
 
-  var MAXW = 6000;                                  // 画布宽度上限，防止 36 张时爆内存
-  var gap = 12;
-  var fw = Math.min(280, Math.floor((MAXW - 260 - (N - 1) * gap) / N));
-  fw = Math.max(60, fw);
+  var PER = CS_PER_ROW;
+  var rows = Math.ceil(N / PER);
+  var fr = frames(roll);
+
+  // 画布预算：控制在约 6M 像素以内，36 张的大卷也不至于 OOM
+  var fw = roll.spec === '120' ? 250 : 330;
   var fh = roll.spec === '120' ? fw : Math.round(fw * 2 / 3);
 
-  var PADX = 90, PADTOP = 150, PADBOT = 150;
-  var perfH = 26;
-  var stripW = N * fw + (N - 1) * gap;
-  var W = stripW + PADX * 2;
-  var H = PADTOP + perfH + fh + perfH + 46 + PADBOT;
+  var PADX = 86, PADTOP = 132, PADBOT = 118;
+  var GAPX = 8, GAPY = 16;
+  var PERF = 20, NUMH = 30;
+  var LABELW = 76;                       // 左侧行号区
+
+  var rowH = PERF * 2 + fh + NUMH;
+  // 画布宽度按最长的一行算 —— 不满 8 格的卷不该留一条空片基
+  var maxCount = Math.min(PER, N);
+  var stripW = maxCount * fw + (maxCount - 1) * GAPX;
+  var W = PADX * 2 + LABELW + stripW;
+  var H = PADTOP + rows * rowH + (rows - 1) * GAPY + PADBOT;
 
   var c = newCanvas(W, H);
   var g = c.getContext('2d');
 
-  // 片基
-  var grad = g.createLinearGradient(0, PADTOP, 0, PADTOP + perfH * 2 + fh);
-  grad.addColorStop(0, '#33240F');
-  grad.addColorStop(0.5, '#3A2812');
-  grad.addColorStop(1, '#33240F');
-  g.fillStyle = grad;
-  g.fillRect(PADX - 26, PADTOP, stripW + 52, perfH * 2 + fh);
+  g.fillStyle = '#0D0A07';
+  g.fillRect(0, 0, W, H);
 
-  // 齿孔
-  g.fillStyle = 'rgba(241,231,215,0.9)';
-  var hw = 22, hh = 14, step = 34;
-  for (var x = PADX - 26 + 14; x + hw < PADX + stripW + 26; x += step) {
-    roundRect(g, x, PADTOP + 6, hw, hh, 4);
-    roundRect(g, x, PADTOP + perfH + fh + 6, hw, hh, 4);
-  }
-
-  // 画面
-  for (var i = 0; i < N; i++) {
-    var fx = PADX + i * (fw + gap);
-    var fy = PADTOP + perfH;
-    drawCover(g, imgs[i], fx, fy, fw, fh);
-    g.strokeStyle = 'rgba(0,0,0,.5)';
-    g.lineWidth = 1;
-    g.strokeRect(fx + .5, fy + .5, fw - 1, fh - 1);
-
-    // 帧号
-    var n = roll.start + Math.floor(i / 2);
-    g.fillStyle = '#E5A03A';
-    g.font = '400 ' + Math.max(11, Math.round(fw * 0.09)) + 'px "Space Mono",monospace';
-    g.textAlign = 'center';
-    g.fillText((i % 2 === 0) ? String(n) : n + 'A', fx + fw / 2, fy + fh + perfH + 28);
-    g.textAlign = 'left';
-  }
-
-  // 片头信息
+  // ---- 片头信息 ----
   g.fillStyle = '#F1E7D7';
-  g.font = '600 44px "Noto Serif SC","Songti SC",serif';
-  g.fillText(roll.film || '未命名胶卷', PADX, 78);
+  g.font = '600 42px "Noto Serif SC","Songti SC",serif';
+  g.textBaseline = 'alphabetic';
+  g.fillText(roll.film || '未命名胶卷', PADX, 76);
 
-  g.fillStyle = 'rgba(241,231,215,.55)';
-  g.font = '400 26px "Space Mono",monospace';
+  g.fillStyle = 'rgba(241,231,215,.5)';
+  g.font = '400 24px "Space Mono",monospace';
   var meta = [];
   if (roll.camera) meta.push(roll.camera);
   if (roll.lens) meta.push(roll.lens);
   if (roll.shots && roll.shots.length) meta.push(fmtDate(roll.shots[0]) + ' 拍摄');
   if (roll.devDate) meta.push(fmtDate(roll.devDate) + ' 冲洗');
-  g.fillText(meta.join('   ·   '), PADX, 118);
+  if (roll.dev) meta.push(roll.dev);
+  g.fillText(meta.join('   ·   '), PADX, 112);
 
   g.textAlign = 'right';
   g.fillStyle = '#E5A03A';
-  g.font = '400 26px "Space Mono",monospace';
-  g.fillText(roll.spec + ' · ISO ' + roll.iso + ' · ' + N + ' EXP', W - PADX, 78);
+  g.font = '400 24px "Space Mono",monospace';
+  g.fillText(roll.spec + ' · ISO ' + roll.iso + ' · ' + N + ' EXP', W - PADX, 76);
   g.textAlign = 'left';
 
-  // 页脚：分段地点
-  g.fillStyle = 'rgba(241,231,215,.5)';
-  g.font = '400 24px "Space Mono",monospace';
-  var segLine = (roll.segs || []).map(function(s){ return s.loc; }).join('  /  ');
-  g.fillText(segLine || '未分段', PADX, H - 74);
+  // ---- 一行一条底片 ----
+  for (var r = 0; r < rows; r++) {
+    var y0 = PADTOP + r * (rowH + GAPY);
+    var sx = PADX + LABELW;
 
+    // 这一行实际有几格 —— 末行不满时片基只铺到最后一格，
+    // 铺满整宽会变成一截空白胶片，不像真印样
+    var countInRow = Math.min(PER, N - r * PER);
+    var rowW = countInRow * fw + (countInRow - 1) * GAPX;
+
+    var grad = g.createLinearGradient(0, y0, 0, y0 + PERF * 2 + fh);
+    grad.addColorStop(0, '#33240F');
+    grad.addColorStop(0.5, '#3A2812');
+    grad.addColorStop(1, '#33240F');
+    g.fillStyle = grad;
+    g.fillRect(sx - 16, y0, rowW + 32, PERF * 2 + fh);
+
+    // 齿孔
+    g.fillStyle = 'rgba(241,231,215,0.88)';
+    var hw = 20, hh = 13, step = 32;
+    for (var x = sx - 16 + 13; x + hw < sx + rowW + 16; x += step) {
+      roundRect(g, x, y0 + 5, hw, hh, 4);
+      roundRect(g, x, y0 + PERF + fh + 5, hw, hh, 4);
+    }
+
+    // 左侧：这一行覆盖的格号区间 + 规格
+    var from = r * PER + 1;
+    var to = Math.min(N, (r + 1) * PER);
+    g.fillStyle = '#E5A03A';
+    g.font = '400 20px "Space Mono",monospace';
+    g.fillText((from < 10 ? '0' : '') + from + '–' + (to < 10 ? '0' : '') + to,
+               PADX, y0 + PERF + fh / 2 + 4);
+    g.fillStyle = 'rgba(241,231,215,.32)';
+    g.font = '400 17px "Space Mono",monospace';
+    g.fillText(roll.spec, PADX, y0 + PERF + fh / 2 + 28);
+
+    // 画面 + 格号
+    for (var i = 0; i < PER; i++) {
+      var k = r * PER + i;
+      if (k >= N) break;
+      var fx = sx + i * (fw + GAPX);
+      var fy = y0 + PERF;
+
+      drawCover(g, imgs[k], fx, fy, fw, fh);
+      g.strokeStyle = 'rgba(0,0,0,.55)';
+      g.lineWidth = 1;
+      g.strokeRect(fx + .5, fy + .5, fw - 1, fh - 1);
+
+      // 格号用胶卷的真实编号（1 / 1A / 2 / 2A…），不是 1..N 的连续序号
+      g.fillStyle = '#E5A03A';
+      g.font = '400 ' + Math.max(13, Math.round(fw * 0.085)) + 'px "Space Mono",monospace';
+      g.textAlign = 'center';
+      g.fillText(fr[k] ? fr[k].label : String(k + 1), fx + fw / 2, fy + fh + PERF + 22);
+      g.textAlign = 'left';
+    }
+  }
+
+  // ---- 页脚 ----
+  g.fillStyle = 'rgba(241,231,215,.45)';
+  g.font = '400 22px "Space Mono",monospace';
+  var segLine = (roll.segs || []).map(function(s){ return s.loc; }).join('  /  ');
+  g.fillText(segLine || '未分段', PADX, H - 62);
   g.textAlign = 'right';
-  g.fillText('菲林档案', W - PADX, H - 74);
+  g.fillText('菲林档案', W - PADX, H - 62);
   g.textAlign = 'left';
 
   return c;
@@ -3699,7 +3935,7 @@ function exportOverviewToAlbum(rollId){
       var c = renderOverview(r, imgs);
       if (!c) { toast('没有可导出的画面'); return; }
       var dataUrl = c.toDataURL('image/jpeg', 0.9);
-      Native.saveToAlbum(dataUrl, Exporter_safeName(r.film + '_' + r.primary + '_总览'));
+      Native.saveToAlbum(dataUrl, Exporter_safeName(r.film + '_' + r.primary + '_总览' + exportStamp()));
     })
     .catch(function(e){
       Native.log('error', '总览导出失败: ' + (e && e.message));
@@ -3872,6 +4108,22 @@ function sheetSettings(){
       '<div class="hint">' + I.info + '每次导入时仍可单独改。保留原片会显著占空间。</div>' +
     '</div>' +
 
+    '<div class="field">' +
+      '<label>数据</label>' +
+      '<div class="opts">' +
+        '<button class="opt" data-act="loadSamples">' +
+          '<span class="oi">' + I.up + '</span>' +
+          '<span style="min-width:0"><span class="ot" style="display:block">载入示例数据</span>' +
+          '<span class="os" style="display:block">11 卷胶卷 / 9 件器材 / 7 款库存，用来看填充后的效果</span></span>' +
+          '<span class="oa">' + I.right + '</span></button>' +
+        '<button class="opt" data-act="wipeData">' +
+          '<span class="oi">' + I.x + '</span>' +
+          '<span style="min-width:0"><span class="ot" style="display:block">清空全部数据</span>' +
+          '<span class="os" style="display:block">删掉所有胶卷、器材、库存和照片文件</span></span>' +
+          '<span class="oa">' + I.right + '</span></button>' +
+      '</div>' +
+    '</div>' +
+
     '<div class="exportmeta">' +
       (APP.freeBytes ? '<span>剩余 ' + fmtBytes(APP.freeBytes) + '</span>' : '') +
       '<span>展示副本 ' + SETTINGS.displayPx + 'px</span>' +
@@ -3882,6 +4134,19 @@ function sheetSettings(){
 
     '<div class="sheet-actions single">' +
       '<button class="btn ghost" data-act="closeSheet">关闭</button>' +
+    '</div>';
+}
+
+function sheetWipe(){
+  return '<div class="grab"></div>' +
+    '<h3>清空全部数据</h3>' +
+    '<p class="sh-sub">会删掉 <b>' + ROLLS.length + ' 卷胶卷、' + GEAR.length +
+      ' 件器材、' + STOCK.length + ' 款库存</b>，以及所有导入的照片、缩略图和抠好的设备图。</p>' +
+    '<p class="sh-sub">这个操作不可撤销。</p>' +
+    '<div class="sheet-actions">' +
+      '<button class="btn ghost" data-act="closeSheet">取消</button>' +
+      '<button class="btn primary" data-act="wipeGo"' +
+        ' style="background:var(--rust);border-color:var(--rust);color:#FFF">确认清空</button>' +
     '</div>';
 }
 
@@ -4108,6 +4373,7 @@ function renderSheet(){
     case 'cutout':    h = sheetCutout(); break;
     case 'settings':  h = sheetSettings(); break;
     case 'illus':     h = sheetIllus(state.sheetArg.id); break;
+    case 'wipe':      h = sheetWipe(); break;
   }
   sheetEl.innerHTML = h;
   sheetEl.scrollTop = sheetScroll;
@@ -4445,6 +4711,30 @@ document.getElementById('phone').addEventListener('click', function(e){
       renderSheet();
       break;
 
+    // ---------- 数据管理 ----------
+
+    case 'loadSamples':
+      loadSamples();
+      saveDoc();
+      closeSheet();
+      render();
+      toast('已载入 ' + ROLLS.length + ' 卷示例胶卷');
+      break;
+
+    case 'wipeData':
+      openSheet('wipe');
+      break;
+
+    case 'wipeGo':
+      // 元数据清了但文件还在的话，"清空"就是假的 —— 一并删掉
+      Native.wipeFiles();
+      ROLLS = []; GEAR = []; STOCK = []; FOLDERS = [];
+      saveDoc();
+      closeSheet();
+      render();
+      toast('已清空全部数据');
+      break;
+
     // ---------- 设备线稿 ----------
 
     case 'illusPick':
@@ -4674,9 +4964,8 @@ function applyTheme(t){
   if (hydrate(doc)) {
     Native.log('info', '载入 ' + ROLLS.length + ' 卷 / ' + GEAR.length + ' 器材 / ' + STOCK.length + ' 款胶卷');
   } else {
-    // 首次运行：现有字面量就是种子，存一次即成为真实数据。
-    // 不需要迁移脚本 —— 演示数据直接变成用户数据。
-    Native.log('info', '首次运行，写入种子数据');
+    // 首次运行：空白开始。示例数据要用户自己去设置里载入。
+    Native.log('info', '首次运行，空白文档');
     saveDoc();
   }
 
