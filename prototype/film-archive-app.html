@@ -1098,6 +1098,9 @@ h1{
 .gearcard:hover{border-color:var(--bd2)}
 .gearcard:focus-visible{outline:2px solid var(--am);outline-offset:2px}
 .gearshot{
+  /* 必须显式 width:100%。只写 aspect-ratio 的话，在 flex 列里宽度是
+     「由内容决定」，实际只占卡片的一部分，右边露出一条卡片底色。 */
+  width:100%;
   aspect-ratio:1/.82;
   max-width:100%;
   display:grid;
@@ -1578,6 +1581,7 @@ h1{
 .illusart{
   display:grid;
   place-items:center;
+  width:100%;
   aspect-ratio:1/.92;
   background:
     radial-gradient(62% 52% at 50% 46%, rgba(229,160,58,.14), transparent 72%),
@@ -1873,9 +1877,23 @@ html[data-theme="paper"] .homebar i{ background:#C6B393; }
    overlay 在浅底上会把纸面压灰，看起来像脏了。 */
 html[data-theme="paper"] .phone::after{ opacity:.16; mix-blend-mode:multiply; }
 
-/* deviceSVG 把描边色写死成米白 #F1E7D7，在米色背景上完全看不见 ——
+/* 米色主题下，放设备图/线稿的底也要跟着变浅。
+   不处理的话是两个问题叠在一起：深色底贴在浅色卡片上像一块黑补丁，
+   而下面那组属性选择器会把描边改成深色 —— 深色压深色等于什么都看不见。 */
+html[data-theme="paper"] .gearshot,
+html[data-theme="paper"] .illusart,
+html[data-theme="paper"] .cutdemo figure,
+html[data-theme="paper"] .cutdemo .cimg{
+  background:
+    radial-gradient(62% 52% at 50% 46%, rgba(169,108,18,.10), transparent 72%),
+    repeating-conic-gradient(from 45deg, rgba(0,0,0,.03) 0% 25%, transparent 0% 50%) 0 0/12px 12px,
+    #E9DFCC;
+}
+
+/* deviceSVG 把描边色写死成米白 #F1E7D7，在米色主题的浅底上完全看不见 ——
    相机仓库的机身镜头会集体消失。var() 在 SVG 表现属性里不生效，
-   但表现属性的优先级低于任何 CSS 规则，所以用属性选择器覆盖。 */
+   但表现属性的优先级低于任何 CSS 规则，所以用属性选择器覆盖。
+   注意：这条只有在上面那个浅底生效时才是对的，两者必须成对。 */
 html[data-theme="paper"] .gearshot svg [stroke="#F1E7D7"],
 html[data-theme="paper"] .cutdemo svg [stroke="#F1E7D7"]{ stroke:var(--tx); }
 html[data-theme="paper"] .gearshot svg [stroke="#A48F76"],
@@ -2602,6 +2620,17 @@ function rollThumb(roll){
   }
   return sceneSVG(roll.scene, hash(roll.id));
 }
+/** 一卷的第一个地点。新建的卷还没有分段，不能直接取 segs[0] ——
+ *  那样会抛 TypeError，把整个 render() 打断，页面看起来像「点了没反应」。 */
+function firstLoc(r){
+  return (r.segs && r.segs.length) ? r.segs[0].loc : '未分段';
+}
+
+/** 一卷的首个拍摄日期。理论上总有，但新增字段时容易漏，兜一下。 */
+function firstShot(r){
+  return (r.shots && r.shots.length) ? r.shots[0] : (r.primary || todayISO());
+}
+
 function segOf(roll, idx){
   for(var i=0;i<roll.segs.length;i++){ if(idx >= roll.segs[i].from && idx <= roll.segs[i].to) return roll.segs[i]; }
   return null;
@@ -2869,8 +2898,13 @@ function viewFilmList(){
           return '<button class="row" data-act="roll" data-id="' + r.id + '">' +
             '<span class="rowthumb">' + rollThumb(r) + '</span>' +
             '<span class="rowbody">' +
-              '<span class="rowt">' + fmtDate(r.primary) + ' · ' + esc(r.camera) + '</span>' +
-              '<span class="rows">' + esc(r.segs[0].loc) + ' · ' + r.segs.length + ' 段</span>' +
+              '<span class="rowt">' +
+                [fmtDate(r.primary), r.camera]
+                  .filter(function(x){ return !!x; })
+                  .map(function(x){ return esc(x); })
+                  .join(' · ') +
+              '</span>' +
+              '<span class="rows">' + esc(firstLoc(r)) + ' · ' + r.segs.length + ' 段</span>' +
             '</span>' +
             '<span class="rowend">' + r.spec + '</span>' +
           '</button>';
@@ -2950,7 +2984,7 @@ function viewRoll(){
       '<dl class="bl-grid">' +
         '<div><dt>机身</dt><dd>' + esc(r.camera) + '</dd></div>' +
         '<div><dt>镜头</dt><dd>' + esc(r.lens) + '</dd></div>' +
-        '<div><dt>拍摄日期</dt><dd class="mono">' + fmtDate(r.shots[0]) +
+        '<div><dt>拍摄日期</dt><dd class="mono">' + fmtDate(firstShot(r)) +
           (r.shots.length > 1 ? ' – ' + fmtDate(r.shots[r.shots.length-1]).slice(5) : '') + '</dd></div>' +
         '<div><dt>冲洗日期</dt><dd class="mono">' + fmtDate(r.devDate) + '</dd></div>' +
         '<div><dt>冲洗店</dt><dd>' + esc(r.dev) + '</dd></div>' +
@@ -3036,7 +3070,12 @@ function viewCalendar(){
       '<span class="rowthumb">' + rollThumb(r) + '</span>' +
       '<span class="rowbody">' +
         '<span class="rowt">' + esc(r.film) + '</span>' +
-        '<span class="rows">' + fmtDate(r.shots[0]) + ' · ' + esc(r.camera) + ' · ' + esc(r.segs[0].loc) + '</span>' +
+        '<span class="rows">' +
+          [fmtDate(firstShot(r)), r.camera, firstLoc(r)]
+            .filter(function(x){ return !!x; })
+            .map(function(x){ return esc(x); })
+            .join(' · ') +
+        '</span>' +
       '</span>' +
       '<span class="rowend">' + I.right + '</span>' +
     '</button>';
@@ -3393,7 +3432,7 @@ function sheetEditRoll(rollId){
     '</div>' +
     '<div class="fieldrow">' +
       '<div class="field"><label>拍摄日期</label>' +
-        '<input type="date" id="fShot" value="' + r.shots[0] + '"></div>' +
+        '<input type="date" id="fShot" value="' + firstShot(r) + '"></div>' +
       '<div class="field"><label>冲洗日期</label>' +
         '<input type="date" id="fDevDate" value="' + r.devDate + '"></div>' +
     '</div>' +
@@ -3414,7 +3453,7 @@ function sheetFrame(rollId, idx){
       '<div><div class="k">胶卷</div><div class="v mono">' + esc(r.film) + '</div></div>' +
       '<div><div class="k">拍摄地点</div><div class="v">' + esc(s ? s.loc : '未标记') + '</div></div>' +
       '<div><div class="k">相机型号</div><div class="v">' + esc(r.camera) + '</div></div>' +
-      '<div><div class="k">拍摄时间</div><div class="v mono">' + fmtDate(r.shots[0]) + '</div></div>' +
+      '<div><div class="k">拍摄时间</div><div class="v mono">' + fmtDate(firstShot(r)) + '</div></div>' +
       '<div><div class="k">冲洗</div><div class="v">' + esc(r.dev) + '</div></div>' +
     '</div>' +
     '<div class="sheet-actions">' +
@@ -3434,7 +3473,7 @@ function sheetOverview(rollId){
         '<div style="min-width:0">' +
           '<div class="pt">' + esc(r.film) + '</div>' +
           '<div class="ps">' + esc(r.camera) + ' · ' + esc(r.lens) + '<br>' +
-            fmtDate(r.shots[0]) + ' 拍摄 / ' + fmtDate(r.devDate) + ' 冲洗 · ' + esc(r.dev) + '</div>' +
+            fmtDate(firstShot(r)) + ' 拍摄 / ' + fmtDate(r.devDate) + ' 冲洗 · ' + esc(r.dev) + '</div>' +
         '</div>' +
         '<div class="pn">' + r.spec + '<br>ISO ' + r.iso + '<br>' + r.count + ' EXP</div>' +
       '</div>' +
@@ -3466,7 +3505,7 @@ function sheetBorder(rollId, idx){
         '<div class="wm-line">' +
           // 相机可能没填，空字段不能留下孤立的分隔点
           (function(){
-            var parts = [fmtDate(r.shots[0])];
+            var parts = [fmtDate(firstShot(r))];
             if (r.camera) parts.push(esc(r.camera));
             if (r.film) parts.push(esc(r.film));
             return parts.map(function(x){ return '<span>' + x + '</span>'; }).join('<i></i>');
@@ -4755,6 +4794,7 @@ document.getElementById('phone').addEventListener('click', function(e){
         camera: '', lens: '', dev: '', devDate: '',
         source: 'scanner', sourceModel: '',
         primary: today, shots: [today], start: 1, count: 0,
+        // segs 先留空：还没有画面可分段。导入照片时 reconcileSegs 会自动建一段。
         folder: null, segs: [], photos: []
       });
       saveDoc();
