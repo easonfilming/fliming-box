@@ -2,6 +2,7 @@ package com.filmbox.archive;
 
 import android.app.Activity;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.os.Build;
 import android.util.Log;
@@ -225,94 +226,82 @@ public class Bridge implements Importer.Callback, Capture.Callback {
         act.runOnUiThread(() -> capture.begin(p));
     }
 
-    // ============================================================
-    //  MediaPipe 抠图 —— 会话式
-    // ============================================================
-    //  begin 打开一张图，之后每次 cutoutPoint 只跑推理，不重新解码也不重建
-    //  segmenter。用户微调通常要点三五次，这个差别决定了它能不能用。
-    //  segment() 同步且要 0.5–3 秒，全部放 io 线程。
-
-    private final CutoutEngine cutout = new CutoutEngine();
-    private volatile String cutoutOutId = "";
-
-    @JavascriptInterface
-    public void cutoutBegin(String reqJson) {
-        final String src;
-        final int px;
-        try {
-            JSONObject o = new JSONObject(reqJson);
-            src = o.optString("source", "");
-            px = o.optInt("workingPx", 1024);
-            cutoutOutId = o.optString("outId", "gear_" + System.currentTimeMillis());
-        } catch (JSONException e) {
-            fail("onCutoutError", "请求格式错误");
-            return;
-        }
-        if (src.isEmpty()) {
-            fail("onCutoutError", "缺少源图路径");
-            return;
-        }
-
-        final String outId = cutoutOutId;
-        io.execute(() -> {
-            try {
-                cutout.begin(act, new File(src), px);
-                JSONObject r = new JSONObject();
-                r.put("outId", outId);
-                r.put("w", cutout.width());
-                r.put("h", cutout.height());
-                call("onCutoutReady", r.toString());
-            } catch (Exception e) {
-                Log.e(TAG, "抠图会话开启失败", e);
-                fail("onCutoutError", "开启失败：" + e.getMessage());
-            }
-        });
-    }
-
-    @JavascriptInterface
-    public void cutoutPoint(String reqJson) {
-        if (!cutout.isOpen()) {
-            fail("onCutoutError", "会话未开始");
-            return;
-        }
-        final float nx, ny;
-        try {
-            JSONObject o = new JSONObject(reqJson);
-            nx = (float) o.optDouble("x", 0.5);
-            ny = (float) o.optDouble("y", 0.5);
-        } catch (JSONException e) {
-            fail("onCutoutError", "请求格式错误");
-            return;
-        }
-
-        final String outId = cutoutOutId;
-        io.execute(() -> {
-            try {
-                Bitmap bmp = cutout.segmentAt(nx, ny);
-                File out = new File(photos.gear, outId + ".png");
-                CutoutEngine.writePng(bmp, out);
-                bmp.recycle();
-
-                JSONObject r = new JSONObject();
-                r.put("outId", outId);
-                // 加时间戳当缓存穿透：PathHandler 对 /gear/ 发的是 immutable，
-                // 同一个 URL 会被 WebView 缓存住，换落点后看到的还是上一张
-                r.put("url", "/gear/" + outId + ".png?t=" + System.currentTimeMillis());
-                r.put("bytes", out.length());
-                call("onCutoutResult", r.toString());
-            } catch (Exception e) {
-                Log.e(TAG, "抠图失败", e);
-                fail("onCutoutError", "抠图失败：" + e.getMessage());
-            }
-        });
-    }
-
-    @JavascriptInterface
-    public void cutoutEnd() {
-        io.execute(cutout::end);
-    }
-
     // ---- Capture.Callback（主线程回调）----
+
+    /**
+     * 把选中的图片存成设备照片。缩到长边 1600，写成 PNG（保留可能的透明通道）。
+     *
+     * 之前这里是 MediaPipe 抠图，效果不达标已移除。现在就是把用户选的图
+     * 缩一下存下来 —— 简单、可预期。
+     */
+    @JavascriptInterface
+    public void setGearPhoto(String reqJson) {
+        final String gearId, source;
+        try {
+            JSONObject o = new JSONObject(reqJson);
+            gearId = o.optString("gearId", "");
+            source = o.optString("source", "");
+        } catch (JSONException e) {
+            fail("onGearPhotoError", "请求格式错误");
+            return;
+        }
+        if (gearId.isEmpty() || source.isEmpty()) {
+            fail("onGearPhotoError", "参数不全");
+            return;
+        }
+
+        io.execute(() -> {
+            Bitmap bmp = null;
+            try {
+                File src = new File(source);
+                if (!src.isFile()) throw new java.io.IOException("源文件不存在");
+
+                BitmapFactory.Options bounds = new BitmapFactory.Options();
+                bounds.inJustDecodeBounds = true;
+                BitmapFactory.decodeFile(source, bounds);
+                if (bounds.outWidth <= 0) throw new java.io.IOException("不是可解码的图片");
+
+                int sample = 1;
+                int maxDim = Math.max(bounds.outWidth, bounds.outHeight);
+                while (maxDim / (sample * 2) >= 1600) sample *= 2;
+
+                BitmapFactory.Options opts = new BitmapFactory.Options();
+                opts.inSampleSize = sample;
+                bmp = BitmapFactory.decodeFile(source, opts);
+                if (bmp == null) throw new java.io.IOException("解码失败");
+
+                Bitmap scaled = fitWithin(bmp, 1600);
+                if (scaled != bmp) { bmp.recycle(); bmp = scaled; }
+
+                File out = new File(photos.gear, gearId + ".png");
+                try (java.io.FileOutputStream fos = new java.io.FileOutputStream(out)) {
+                    if (!bmp.compress(Bitmap.CompressFormat.PNG, 100, fos)) {
+                        throw new java.io.IOException("PNG 编码失败");
+                    }
+                }
+
+                JSONObject r = new JSONObject();
+                r.put("gearId", gearId);
+                // 时间戳穿透缓存：PathHandler 对 /gear/ 发的是 immutable
+                r.put("url", "/gear/" + gearId + ".png?t=" + System.currentTimeMillis());
+                call("onGearPhotoSet", r.toString());
+            } catch (Exception e) {
+                Log.e(TAG, "设置设备照片失败", e);
+                fail("onGearPhotoError", String.valueOf(e.getMessage()));
+            } finally {
+                if (bmp != null && !bmp.isRecycled()) bmp.recycle();
+            }
+        });
+    }
+
+    private static Bitmap fitWithin(Bitmap src, int max) {
+        int w = src.getWidth(), h = src.getHeight();
+        int longSide = Math.max(w, h);
+        if (longSide <= max) return src;
+        float k = (float) max / longSide;
+        return Bitmap.createScaledBitmap(src, Math.max(1, Math.round(w * k)),
+                                         Math.max(1, Math.round(h * k)), true);
+    }
 
     /** 从相册选一张做设备照片（不走整卷导入流程）。 */
     @JavascriptInterface

@@ -86,40 +86,6 @@ def _get(url, timeout=45):
     return urllib.request.urlopen(req, timeout=timeout).read()
 
 
-# ---------------------------------------------------------------
-#  MediaPipe Interactive Segmenter 的模型
-# ---------------------------------------------------------------
-# 打包进 APK，运行时完全不联网。这是选 MediaPipe 而不是 ML Kit 的原因：
-# ML Kit 的主体分割是 unbundled 的，模型走 Google Play 服务动态下载，
-# 国内手机要么没 GMS 要么下不到，功能会直接失效。
-MODEL_URL = ('https://storage.googleapis.com/mediapipe-models/interactive_segmenter/'
-             'magic_touch/float32/1/magic_touch.tflite')
-MODEL_NAME = 'magic_touch.tflite'
-MODEL_BYTES = 6227884
-
-
-def fetch_model():
-    """拉模型并放进 assets 根目录（和字体一样拍平，不放子目录）。"""
-    path = os.path.join(ASSETS, MODEL_NAME)
-    if os.path.exists(path) and os.path.getsize(path) == MODEL_BYTES:
-        print('  model  %-22s %6.1f MB (已缓存)' % (MODEL_NAME, MODEL_BYTES / 1048576.0))
-        return
-
-    try:
-        data = _get(MODEL_URL, timeout=300)
-    except Exception as e:
-        sys.exit('  模型下载失败：%s\n'
-                 '  CutoutEngine 需要它，没有的话相机仓库的抠图会直接崩。' % e)
-
-    if len(data) != MODEL_BYTES:
-        sys.exit('  模型大小不对：期望 %d 字节，实际 %d 字节（下载被截断？）'
-                 % (MODEL_BYTES, len(data)))
-
-    with open(path, 'wb') as f:
-        f.write(data)
-    print('  model  %-22s %6.1f MB' % (MODEL_NAME, len(data) / 1048576.0))
-
-
 def _latin_urls(css):
     """子集名写在 @font-face 之前的注释里（/* latin */），不在块内部，所以要把注释一起匹配。"""
     found = {}
@@ -245,7 +211,7 @@ def main():
           % (len(css) / 1024.0, len(scripts), sum(s.count('\n') for s in scripts)))
     os.makedirs(ASSETS, exist_ok=True)
     faces = fetch_fonts()
-    fetch_model()
+    # 抠图功能已移除，不再拉 magic_touch.tflite
 
     # 原型把 Noto Serif SC / Noto Sans SC 放在最前，安卓上没有这两个名字，
     # 会落到后面的 serif / sans-serif —— 正好是系统的 Noto CJK，中文没问题。

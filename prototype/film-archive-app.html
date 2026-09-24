@@ -1411,7 +1411,6 @@ h1{
 .opt .oa{margin-left:auto;color:var(--tx3);flex:0 0 auto}
 .opt .oa svg{width:15px;height:15px;display:block}
 
-/* cutout demo */
 .cutdemo{
   display:grid;
   grid-template-columns:1fr 1fr;
@@ -1433,8 +1432,8 @@ h1{
   background:repeating-conic-gradient(from 45deg, rgba(255,255,255,.03) 0% 25%, transparent 0% 50%) 0 0/12px 12px;
 }
 .cutdemo .cimg svg{width:76%;height:76%;overflow:visible}
-/* 抠好的 PNG 用 contain 而不是 cover —— 设备图的整个轮廓都要看得见，
-   裁掉边缘就等于把抠图的成果裁掉了 */
+/* 设备照片用 contain 而不是 cover —— 整个轮廓都要看得见，
+   裁掉边缘等于把设备拍漏了一半 */
 .cutdemo .cimg img{
   width:84%;
   height:84%;
@@ -1458,6 +1457,21 @@ h1{
   padding:7px 9px;
   border-top:1px solid var(--bd);
   text-align:center;
+}
+
+/* 错误面板 */
+.errbox{
+  background:var(--card);
+  border:1px solid var(--bd2);
+  border-radius:9px;
+  padding:10px 12px;
+  font-family:"Space Mono", monospace;
+  font-size:10.5px;
+  line-height:1.85;
+  color:var(--rust);
+  max-height:180px;
+  overflow-y:auto;
+  word-break:break-all;
 }
 
 /* 接触印相。深底 + 片基行 + 上下齿孔 + 连续格号 */
@@ -1578,38 +1592,6 @@ h1{
   text-align:center;
 }
 
-/* 抠图工作台。棋盘格背景是为了让抠出来的透明区域一眼可见 ——
-   否则在纯色底上"抠成功"和"没抠"看起来一模一样。 */
-.cutstage{
-  position:relative;
-  border:1px solid var(--bd2);
-  border-radius:12px;
-  overflow:hidden;
-  display:grid;
-  place-items:center;
-  min-height:220px;
-  background:
-    repeating-conic-gradient(from 45deg, rgba(255,255,255,.055) 0% 25%, transparent 0% 50%) 0 0/18px 18px,
-    #12100D;
-}
-.cutstage img{
-  display:block;
-  max-width:100%;
-  max-height:52vh;
-  object-fit:contain;
-  cursor:crosshair;
-}
-.cutbusy{
-  position:absolute;
-  inset:0;
-  display:grid;
-  place-items:center;
-  background:rgba(10,8,6,.62);
-  color:var(--am2);
-  font-size:13px;
-  letter-spacing:.08em;
-}
-.cutempty{padding:70px 0;color:var(--tx3);font-size:12.5px}
 
 /* watermark preview */
 .wm{
@@ -1988,7 +1970,7 @@ html[data-theme="paper"] .cutdemo svg [fill="#E5A03A"]{ fill:var(--am); }
       <ul>
         <li><b>底片</b> —— 按时间 / 按胶卷双模式，支持自定义文件夹归档多卷</li>
         <li><b>摄影日历</b> —— 月历索引跳转胶卷档案，全年柱状统计每月卷数</li>
-        <li><b>相机仓库</b> —— 机身与镜头登记，拍照自动抠图或上传图片</li>
+        <li><b>相机仓库</b> —— 机身与镜头登记，上传照片或选现成线稿</li>
         <li><b>胶卷仓库</b> —— 库存计数，按过期时间由近到远排序</li>
       </ul>
     </div>
@@ -2029,7 +2011,7 @@ var Native = (function(){
   /* 浏览器模式下的照片存放：pid -> blob URL。
      blob URL 是同源的，所以画进 canvas 不会被污染 —— 导出功能在浏览器里也能跑。 */
   var browserPhotos = {};
-  /* 浏览器模式下抠图产物的 blob URL（原生是 gear/ 下的 PNG 文件） */
+  /* 浏览器模式下设备照片的 blob URL（原生是 gear/ 下的 PNG 文件） */
   var browserGear = {};
 
   function bKey(rollId, pid, kind){ return rollId + '/' + pid + '/' + (kind || 'thumbs'); }
@@ -2227,26 +2209,11 @@ var Native = (function(){
       return o.browserUrl || '';
     },
 
-    /* 抠图产物（PNG，带 alpha）的 URL。 */
+    /* 设备照片（PNG）的 URL。 */
     gearUrl: function(name){
       if (!name) return '';
       if (isNative) return '/gear/' + encodeURIComponent(name);
       return browserGear[name] || '';
-    },
-
-    /* MediaPipe 抠图。浏览器没有 ML —— 不装作有，直接告诉上层不可用，
-       让界面退回设备线稿。这比返回一张"抠失败"的图诚实。 */
-    cutoutBegin: function(req){
-      if (isNative && raw.cutoutBegin) { raw.cutoutBegin(JSON.stringify(req)); return; }
-      window.__bridge.onCutoutUnavailable(JSON.stringify({
-        reason: '浏览器模式没有 ML 抠图，已改用设备线稿'
-      }));
-    },
-    cutoutPoint: function(x, y){
-      if (isNative && raw.cutoutPoint) raw.cutoutPoint(JSON.stringify({ x: x, y: y }));
-    },
-    cutoutEnd: function(){
-      if (isNative && raw.cutoutEnd) raw.cutoutEnd();
     },
 
     /* 清空所有照片文件（元数据由 JS 侧清）。 */
@@ -2257,6 +2224,17 @@ var Native = (function(){
       browserPhotos = {};
       browserGear = {};
       window.__bridge.onPhotosDeleted(JSON.stringify({ deleted: 0 }));
+    },
+
+    /* 把选好的图存成设备照片。浏览器里没法写文件，直接记 blob URL。 */
+    setGearPhoto: function(req){
+      if (isNative && raw.setGearPhoto) { raw.setGearPhoto(JSON.stringify(req)); return; }
+      if (req.source && browserGear) {
+        browserGear[req.gearId + '.png'] = req.source;
+        window.__bridge.onGearPhotoSet(JSON.stringify({ gearId: req.gearId, browser: true }));
+      } else {
+        window.__bridge.onGearPhotoError(JSON.stringify({ message: '拿不到图片' }));
+      }
     },
 
     /* 从相册选一张（不是拍照）。浏览器里复用文件选择。 */
@@ -2270,10 +2248,9 @@ var Native = (function(){
 /* 原生回调的落点。两种模式下都存在，页面代码可以无条件调用。 */
 window.__bridge = window.__bridge || {
   onDoc:function(){}, onImportProgress:function(){}, onImportDone:function(){},
-  onImportError:function(){}, onCutoutReady:function(){}, onCutoutResult:function(){},
-  onCutoutError:function(){}, onCutoutUnavailable:function(){},
-  onExportDone:function(){}, onExportError:function(){}, onPhotosDeleted:function(){},
-  onCaptureDone:function(){}, onCaptureError:function(){}
+  onImportError:function(){}, onExportDone:function(){}, onExportError:function(){},
+  onPhotosDeleted:function(){}, onCaptureDone:function(){}, onCaptureError:function(){},
+  onGearPhotoSet:function(){}, onGearPhotoError:function(){}
 };
 </script>
 
@@ -2823,8 +2800,9 @@ var state = {
   wmStyle:'cream',
   importKeep:false,
   importProgress:null,
-  cutout:null,
-  cutoutTarget:'',
+  gearTarget:'',
+  pendingGear:'',
+  errors:[],
   toast:''
 };
 
@@ -3115,7 +3093,7 @@ function viewGear(){
   var cards = list.map(function(g){
     return '<button class="gearcard" data-act="gear" data-id="' + g.id + '">' +
       '<span class="gearshot">' + gearImage(g) +
-        '<span class="cutbadge">' + I.spark + '已抠图</span>' +
+        (g.photo ? '<span class="cutbadge">' + I.check + '照片</span>' : '') +
       '</span>' +
       '<span class="gearbody">' +
         '<span class="gearname" style="display:block">' + esc(g.name) + '</span>' +
@@ -3253,7 +3231,7 @@ function sheetAddSeg(rollId){
 /* ============================================================
    设备线稿
    ============================================================
-   没有设备照片时的占位。可以随时换成真实拍照抠图 —— 线稿只是"先用着"。
+   没有设备照片时的占位。可以随时换成相册里的真实照片 —— 线稿只是"先用着"。
    ============================================================ */
 var ILLUS = [
   { k:'slr',  label:'单反' },
@@ -3271,7 +3249,7 @@ function illusLabel(k){
 function sheetIllus(targetId){
   return '<div class="grab"></div>' +
     '<h3>选一个线稿</h3>' +
-    '<p class="sh-sub">暂时没有设备照片时先用线稿代替。之后随时可以拍照或选图，换成真实抠图。</p>' +
+    '<p class="sh-sub">暂时没有设备照片时先用线稿代替。之后随时可以从相册换一张真图。</p>' +
     '<div class="illusgrid">' +
       ILLUS.map(function(x){
         return '<button class="illuscard" data-act="pickIllus" data-k="' + x.k + '"' +
@@ -3487,6 +3465,22 @@ function sheetBorder(rollId, idx){
 /* ============================================================
    照片导入
    ============================================================ */
+
+/* ============================================================
+   错误面板
+   ============================================================
+   这个项目的失败模式大多是静默的 —— 而用户看不到 logcat。
+   出错时立刻弹一下，同时存进缓冲区，设置里能翻到完整信息、截图发出来。
+   ============================================================ */
+function logError(msg){
+  var line = new Date().toTimeString().slice(0, 8) + '  ' + String(msg);
+  try {
+    state.errors.push(line);
+    if (state.errors.length > 20) state.errors.shift();
+  } catch(e){}
+  try { Native.log('error', String(msg)); } catch(e){}
+  try { toast('出错了 · ' + String(msg).slice(0, 46)); } catch(e){}
+}
 
 function todayISO(){
   var d = new Date();
@@ -3956,7 +3950,7 @@ window.__bridge.onExportError = function(json){
 };
 
 /* ============================================================
-   相机仓库：拍照 → MediaPipe 抠图
+   相机仓库：选图 / 线稿
    ============================================================ */
 
 /** 设备图：抠好的 PNG 优先，没有就退回手绘线稿。 */
@@ -3968,116 +3962,54 @@ function gearImage(g){
   return deviceSVG(g.ill);
 }
 
-function sheetCutout(){
-  var c = state.cutout || {};
-  var src = c.resultUrl || c.sourceUrl || '';
-  return '<div class="grab"></div>' +
-    '<h3>' + (c.resultUrl ? '抠图结果' : '点一下主体') + '</h3>' +
-    '<p class="sh-sub">' + (c.resultUrl
-        ? '抠得不对？在画面上再点一下主体重新抠。'
-        : '点画面里的机身或镜头，把它从背景里抠出来。') + '</p>' +
-
-    '<div class="cutstage" id="cutstage">' +
-      (src ? '<img src="' + esc(src) + '" alt="">' : '<div class="cutempty">没有图片</div>') +
-      (c.busy ? '<div class="cutbusy">抠图中…</div>' : '') +
-    '</div>' +
-
-    (c.note ? '<p class="sh-sub" style="margin-top:12px">' + esc(c.note) + '</p>' : '') +
-
-    '<div class="sheet-actions">' +
-      '<button class="btn ghost" data-act="cutoutCancel">放弃</button>' +
-      '<button class="btn primary" data-act="cutoutSave"' +
-        (c.resultUrl ? '' : ' disabled style="opacity:.45"') + '>' +
-        I.check + '用作设备照片</button>' +
-    '</div>';
-}
-
-function onCutStageClick(ev){
-  var c = state.cutout;
-  if (!c || c.busy || c.unavailable) return;
-  var img = ev.currentTarget.querySelector('img');
-  if (!img) return;
-  var r = img.getBoundingClientRect();
-  if (!r.width || !r.height) return;
-  var x = (ev.clientX - r.left) / r.width;
-  var y = (ev.clientY - r.top) / r.height;
-  if (x < 0 || x > 1 || y < 0 || y > 1) return;
-  c.busy = true;
-  c.note = '';
-  renderSheet();
-  Native.cutoutPoint(x, y);
-}
-
+/* 从相册选的图存下来当设备照片。
+   这里原本是 MediaPipe 抠图 —— 效果不达标已移除，现在就是把用户选的图
+   缩一下存好。简单、可预期，比一个时好时坏的抠图强。 */
 window.__bridge.onCaptureDone = function(json){
   var o = {};
   try { o = JSON.parse(json) || {}; } catch(e){}
-  if (o.cancelled) return;
 
-  var url = Native.captureUrl(o);
-  if (!url) { toast('拿不到照片'); return; }
+  if (o.cancelled) {
+    // 取消选图 —— 如果是刚建的占位设备，撤掉，别留一条空记录
+    if (state.pendingGear) {
+      for (var i = 0; i < GEAR.length; i++) {
+        if (GEAR[i].id === state.pendingGear) { GEAR.splice(i, 1); break; }
+      }
+      state.pendingGear = '';
+      saveDoc();
+      render(true);
+    }
+    return;
+  }
 
-  state.cutout = {
-    sourcePath: o.path || '',
-    sourceUrl: url,
-    resultUrl: '',
-    outId: 'gear_' + Date.now().toString(36),
-    busy: true,
-    note: ''
-  };
-  openSheet('cutout');
-  renderSheet();
-  Native.cutoutBegin({
-    source: o.path || '',
-    workingPx: 1024,
-    outId: state.cutout.outId
-  });
+  if (!o.path) { toast('拿不到照片'); return; }
+  Native.setGearPhoto({ gearId: state.gearTarget || '', source: o.path });
 };
 
 window.__bridge.onCaptureError = function(json){
   var o = {};
   try { o = JSON.parse(json) || {}; } catch(e){}
-  Native.log('error', '拍照失败：' + (o.message || ''));
-  toast('拍照失败：' + (o.message || '未知错误'));
+  Native.log('error', '选图失败：' + (o.message || ''));
+  toast('选图失败：' + (o.message || '未知错误'));
 };
 
-window.__bridge.onCutoutReady = function(json){
+window.__bridge.onGearPhotoSet = function(json){
   var o = {};
   try { o = JSON.parse(json) || {}; } catch(e){}
-  if (!state.cutout) return;
-  state.cutout.busy = false;
-  state.cutout.note = '模型已就绪（' + o.w + '×' + o.h + '）。点主体开始抠。';
-  renderSheet();
+  var g = null;
+  GEAR.forEach(function(x){ if (x.id === o.gearId) g = x; });
+  if (g) { g.photo = o.gearId + '.png'; saveDoc(); }
+  state.gearTarget = '';
+  state.pendingGear = '';
+  render(true);
+  openSheet('gearItem', {id: o.gearId});
 };
 
-window.__bridge.onCutoutResult = function(json){
+window.__bridge.onGearPhotoError = function(json){
   var o = {};
   try { o = JSON.parse(json) || {}; } catch(e){}
-  if (!state.cutout) return;
-  state.cutout.busy = false;
-  state.cutout.resultUrl = o.url || '';
-  state.cutout.note = '';
-  renderSheet();
-};
-
-window.__bridge.onCutoutUnavailable = function(json){
-  var o = {};
-  try { o = JSON.parse(json) || {}; } catch(e){}
-  if (!state.cutout) return;
-  state.cutout.busy = false;
-  state.cutout.unavailable = true;
-  state.cutout.note = o.reason || '抠图不可用';
-  renderSheet();
-};
-
-window.__bridge.onCutoutError = function(json){
-  var o = {};
-  try { o = JSON.parse(json) || {}; } catch(e){}
-  if (state.cutout) {
-    state.cutout.busy = false;
-    state.cutout.note = o.message || '抠图失败';
-  }
-  Native.log('error', '抠图失败：' + (o.message || ''));
-  renderSheet();
+  Native.log('error', '设置设备照片失败：' + (o.message || ''));
+  toast('设置失败：' + (o.message || '未知错误'));
 };
 
 function sheetSettings(){
@@ -4124,6 +4056,18 @@ function sheetSettings(){
       '</div>' +
     '</div>' +
 
+    (state.errors.length
+      ? '<div class="field">' +
+          '<label>最近错误 · ' + state.errors.length + ' 条</label>' +
+          '<div class="errbox">' +
+            state.errors.slice().reverse().map(function(x){
+              return '<div>' + esc(x) + '</div>';
+            }).join('') +
+          '</div>' +
+          '<div class="hint">' + I.info + '截图这一段发出来就能定位。</div>' +
+        '</div>'
+      : '') +
+
     '<div class="exportmeta">' +
       (APP.freeBytes ? '<span>剩余 ' + fmtBytes(APP.freeBytes) + '</span>' : '') +
       '<span>展示副本 ' + SETTINGS.displayPx + 'px</span>' +
@@ -4141,7 +4085,7 @@ function sheetWipe(){
   return '<div class="grab"></div>' +
     '<h3>清空全部数据</h3>' +
     '<p class="sh-sub">会删掉 <b>' + ROLLS.length + ' 卷胶卷、' + GEAR.length +
-      ' 件器材、' + STOCK.length + ' 款库存</b>，以及所有导入的照片、缩略图和抠好的设备图。</p>' +
+      ' 件器材、' + STOCK.length + ' 款库存</b>，以及所有导入的照片、缩略图和设备照片。</p>' +
     '<p class="sh-sub">这个操作不可撤销。</p>' +
     '<div class="sheet-actions">' +
       '<button class="btn ghost" data-act="closeSheet">取消</button>' +
@@ -4153,30 +4097,24 @@ function sheetWipe(){
 function sheetAddGear(){
   return '<div class="grab"></div>' +
     '<h3>登记设备</h3>' +
-    '<p class="sh-sub">拍一张机身或镜头，点一下主体就能把背景抠掉；也可以从相册选一张现成的。</p>' +
+    '<p class="sh-sub">给设备配一张图 —— 从相册选一张现成的，或者先挑一个线稿占位。</p>' +
 
     '<div class="opts">' +
-      '<button class="opt" data-act="capture" data-purpose="gear">' +
-        '<span class="oi">' + I.spark + '</span>' +
-        '<span style="min-width:0"><span class="ot" style="display:block">直接拍照自动抠图</span>' +
-        '<span class="os" style="display:block">拍完点一下主体，自动去背景</span></span>' +
-        '<span class="oa">' + I.right + '</span></button>' +
-
-      '<button class="opt" data-act="pickPhoto" data-purpose="gear">' +
+      '<button class="opt" data-act="pickPhoto">' +
         '<span class="oi">' + I.up + '</span>' +
         '<span style="min-width:0"><span class="ot" style="display:block">从相册选一张</span>' +
-        '<span class="os" style="display:block">用已有的照片，同样可以抠图</span></span>' +
+        '<span class="os" style="display:block">选一张机身或镜头的照片</span></span>' +
         '<span class="oa">' + I.right + '</span></button>' +
 
       '<button class="opt" data-act="illusPick">' +
         '<span class="oi">' + I.pen + '</span>' +
-        '<span style="min-width:0"><span class="ot" style="display:block">先用线稿代替</span>' +
-        '<span class="os" style="display:block">挑一个现成的机身或镜头线稿，之后随时换真图</span></span>' +
+        '<span style="min-width:0"><span class="ot" style="display:block">用线稿</span>' +
+        '<span class="os" style="display:block">单反 / 旁轴 / 双反 / 傻瓜机 / 镜头，五种现成的</span></span>' +
         '<span class="oa">' + I.right + '</span></button>' +
     '</div>' +
 
     '<p class="sh-sub" style="margin-top:18px;margin-bottom:0">' + I.info +
-      ' 抠图跑在端上（MediaPipe），不联网也不上传。背景越干净 —— 纯色桌面、白纸 —— 效果越好。</p>';
+      ' 照片缩到长边 1600px 存在本机，不上传。</p>';
 }
 
 function sheetAddStock(){
@@ -4259,15 +4197,11 @@ function sheetGear(id){
 
     '<div class="cutdemo" style="grid-template-columns:1fr">' +
       '<figure><div class="cimg">' + gearImage(g) + '</div>' +
-      '<figcaption>' + (g.photo ? '设备照片 · 已抠图' : '线稿 · ' + illusLabel(g.ill)) + '</figcaption></figure>' +
+      '<figcaption>' + (g.photo ? '设备照片' : '线稿 · ' + illusLabel(g.ill)) + '</figcaption></figure>' +
     '</div>' +
 
     '<div class="opts" style="margin-bottom:18px">' +
-      '<button class="opt" data-act="capture" data-purpose="gear-again" data-id="' + g.id + '">' +
-        '<span class="oi">' + I.spark + '</span>' +
-        '<span style="min-width:0"><span class="ot" style="display:block">重新拍照抠图</span></span>' +
-        '<span class="oa">' + I.right + '</span></button>' +
-      '<button class="opt" data-act="pickPhoto" data-purpose="gear-again" data-id="' + g.id + '">' +
+      '<button class="opt" data-act="pickPhoto" data-id="' + g.id + '">' +
         '<span class="oi">' + I.up + '</span>' +
         '<span style="min-width:0"><span class="ot" style="display:block">从相册换一张</span></span>' +
         '<span class="oa">' + I.right + '</span></button>' +
@@ -4370,7 +4304,6 @@ function renderSheet(){
     case 'gearItem':  h = sheetGear(state.sheetArg.id); break;
     case 'import':    h = sheetImport(state.sheetArg.roll); break;
     case 'importing': h = sheetImporting(); break;
-    case 'cutout':    h = sheetCutout(); break;
     case 'settings':  h = sheetSettings(); break;
     case 'illus':     h = sheetIllus(state.sheetArg.id); break;
     case 'wipe':      h = sheetWipe(); break;
@@ -4379,10 +4312,6 @@ function renderSheet(){
   sheetEl.scrollTop = sheetScroll;
   sheetWrap.hidden = false;
 
-  // 抠图工作台需要拿到点击坐标（归一化后传给原生），所以单独挂一个监听。
-  // 用委托的话拿不到相对图片的位置。
-  var stage = document.getElementById('cutstage');
-  if (stage) stage.addEventListener('click', onCutStageClick);
 }
 
 var toastTimer = null;
@@ -4610,15 +4539,23 @@ document.getElementById('phone').addEventListener('click', function(e){
 
     // ---------- 拍照 ----------
 
-    case 'capture':
-      state.cutoutTarget = d.id || '';
-      Native.capturePhoto(d.purpose || '');
+    case 'pickPhoto': {
+      var pid = d.id || '';
+      if (!pid) {
+        // 先建一个占位设备，选完图再让用户补型号；取消选图就撤掉
+        pid = 'g' + Date.now().toString(36);
+        GEAR.unshift({
+          id: pid, kind: 'body', name: '新设备', sub: '',
+          rolls: 0, ill: 'slr', photo: null
+        });
+        state.pendingGear = pid;
+        saveDoc();
+        render(true);
+      }
+      state.gearTarget = pid;
+      Native.pickPhoto('');
       break;
-
-    case 'pickPhoto':
-      state.cutoutTarget = d.id || '';
-      Native.pickPhoto(d.purpose || '');
-      break;
+    }
 
     case 'pickKind':
       state.sheetArg.kind = d.v;
@@ -4667,38 +4604,33 @@ document.getElementById('phone').addEventListener('click', function(e){
       break;
     }
 
-    case 'cutoutSave': {
-      var cc = state.cutout || {};
-      var tid = state.cutoutTarget || '';
-      var tg = null;
-      if (tid) GEAR.forEach(function(x){ if (x.id === tid) tg = x; });
 
-      if (tg) {
-        // 给已有设备换照片
-        if (cc.resultUrl) tg.photo = cc.outId + '.png';
-      } else {
-        tid = 'g' + Date.now().toString(36);
-        GEAR.unshift({
-          id: tid, kind: 'body', name: '新设备', sub: '',
-          rolls: 0, ill: 'slr',
-          photo: cc.resultUrl ? (cc.outId + '.png') : null
-        });
-      }
-
-      Native.cutoutEnd();
-      state.cutout = null;
-      state.cutoutTarget = '';
-      closeSheet();
+    case 'newRoll': {
+      var nid = 'r' + Date.now().toString(36);
+      var today = todayISO();
+      ROLLS.unshift({
+        id: nid, film: '未命名胶卷', stock: '', spec: '135', iso: 400, scene: 'coast',
+        camera: '', lens: '', dev: '', devDate: '',
+        source: 'scanner', sourceModel: '',
+        primary: today, shots: [today], start: 1, count: 0,
+        folder: null, segs: [], photos: []
+      });
       saveDoc();
-      render(true);
-      // 建完/换完直接推编辑窗，让用户补型号和卡口
-      openSheet('gearItem', {id: tid});
+      state.tab = 'film'; state.screen = 'roll'; state.rollId = nid;
+      render();
+      // 新建之后第一件事就是补信息，直接把编辑弹窗推上去
+      openSheet('editRoll', {roll: nid});
       break;
     }
 
+    case 'addStock':
+      openSheet('addStock', {}); break;
+
+    case 'stock':
+      openSheet('stockItem', {name:d.n}); break;
+
     case 'settings':
       openSheet('settings'); break;
-
     case 'setTheme':
       applyTheme(d.v);
       saveDoc();
@@ -4710,8 +4642,6 @@ document.getElementById('phone').addEventListener('click', function(e){
       saveDoc();
       renderSheet();
       break;
-
-    // ---------- 数据管理 ----------
 
     case 'loadSamples':
       loadSamples();
@@ -4726,7 +4656,7 @@ document.getElementById('phone').addEventListener('click', function(e){
       break;
 
     case 'wipeGo':
-      // 元数据清了但文件还在的话，"清空"就是假的 —— 一并删掉
+      // 元数据清了但文件还在的话，「清空」就是假的 —— 一并删掉
       Native.wipeFiles();
       ROLLS = []; GEAR = []; STOCK = []; FOLDERS = [];
       saveDoc();
@@ -4734,8 +4664,6 @@ document.getElementById('phone').addEventListener('click', function(e){
       render();
       toast('已清空全部数据');
       break;
-
-    // ---------- 设备线稿 ----------
 
     case 'illusPick':
       openSheet('illus', {id: d.id || ''});
@@ -4749,8 +4677,7 @@ document.getElementById('phone').addEventListener('click', function(e){
       if (!gg) {
         tid = 'g' + Date.now().toString(36);
         gg = {
-          id: tid,
-          kind: isLens ? 'lens' : 'body',
+          id: tid, kind: isLens ? 'lens' : 'body',
           name: isLens ? '新镜头' : '新机身',
           sub: '', rolls: 0, ill: d.k, photo: null
         };
@@ -4766,7 +4693,12 @@ document.getElementById('phone').addEventListener('click', function(e){
       break;
     }
 
-    // ---------- 胶卷预设 ----------
+    case 'pickStockSpec':
+      if (!state.sheetArg) state.sheetArg = {};
+      state.sheetArg.spec = d.v;
+      (function(){ var w = t.parentNode; [].forEach.call(w.children, function(b){
+        b.setAttribute('aria-pressed', b === t); }); })();
+      break;
 
     case 'pickFilm': {
       // 预设只是快捷方式：填型号、规格、ISO，之后照样能改
@@ -4785,13 +4717,6 @@ document.getElementById('phone').addEventListener('click', function(e){
       state.sheetArg.iso = parseInt(d.iso, 10) || 400;
       break;
     }
-
-    case 'pickStockSpec':
-      if (!state.sheetArg) state.sheetArg = {};
-      state.sheetArg.spec = d.v;
-      (function(){ var w = t.parentNode; [].forEach.call(w.children, function(b){
-        b.setAttribute('aria-pressed', b === t); }); })();
-      break;
 
     case 'stockSave': {
       var sNameEl = document.getElementById('sName');
@@ -4828,36 +4753,6 @@ document.getElementById('phone').addEventListener('click', function(e){
       render(true);
       break;
     }
-
-    case 'cutoutCancel':
-      Native.cutoutEnd();
-      state.cutout = null;
-      closeSheet();
-      break;
-
-    case 'newRoll': {
-      var nid = 'r' + Date.now().toString(36);
-      var today = todayISO();
-      ROLLS.unshift({
-        id: nid, film: '未命名胶卷', stock: '', spec: '135', iso: 400, scene: 'coast',
-        camera: '', lens: '', dev: '', devDate: '',
-        source: 'scanner', sourceModel: '',
-        primary: today, shots: [today], start: 1, count: 0,
-        folder: null, segs: [], photos: []
-      });
-      saveDoc();
-      state.tab = 'film'; state.screen = 'roll'; state.rollId = nid;
-      render();
-      // 新建之后第一件事就是补信息，直接把编辑弹窗推上去
-      openSheet('editRoll', {roll: nid});
-      break;
-    }
-
-    case 'addStock':
-      openSheet('addStock', {}); break;
-
-    case 'stock':
-      openSheet('stockItem', {name:d.n}); break;
 
     case 'closeSheet':
       closeSheet(); break;
@@ -4948,11 +4843,11 @@ function applyTheme(t){
   // 错误先接住。这个项目的失败模式全是静默的 —— 字体回退、资源找不到、
   // 桥调用失败，都不会有可见反馈。没有这个，调试只能靠猜。
   window.addEventListener('error', function(ev){
-    Native.log('error', (ev.message || 'error') + ' @' +
+    logError((ev.message || 'error') + ' @' +
       String(ev.filename || '?').split('/').pop() + ':' + (ev.lineno || 0));
   });
   window.addEventListener('unhandledrejection', function(ev){
-    Native.log('error', 'unhandledrejection: ' + ev.reason);
+    logError('unhandledrejection: ' + ev.reason);
   });
 
   try { APP = Native.appInfo(); } catch(e){}

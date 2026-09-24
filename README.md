@@ -6,9 +6,9 @@
 
 ## 下载
 
-**[⬇ 下载 APK](https://github.com/easonfilming/fliming-box/releases/latest)**（约 25 MB）
+**[⬇ 下载 APK](https://github.com/easonfilming/fliming-box/releases/latest)**（约 4.3 MB）
 
-传到手机上点开安装，允许「安装未知来源应用」。需要 **Android 10 或更高**，**arm64** 机型。
+传到手机上点开安装，允许「安装未知来源应用」。需要 **Android 10 或更高**。
 
 自签名包，没上应用商店，所以系统会提示未知来源 —— 这是正常的。安装包的 SHA-256 和签名指纹在每个 release 的说明里，可以核对。
 
@@ -31,9 +31,8 @@
 
 **摄影日历** — 月历索引胶卷档案，全年柱状图统计每月拍摄量。
 
-**相机仓库** — 登记机身与镜头。三条路径：直接拍照后**点一下主体抠掉背景**（端上跑的 MediaPipe 模型，不联网也不上传）、从相册选一张、或者**先挑一个线稿占位**，之后随时换成真图。线稿有单反 / 旁轴 / 双反 / 傻瓜机 / 镜头五种。
+**相机仓库** — 登记机身与镜头。两条路径：**从相册选一张**，或者**先挑一个线稿占位**，之后随时换成真图。线稿有单反 / 旁轴 / 双反 / 傻瓜机 / 镜头五种。
 
-<p align="center"><img src="docs/05-cutout.jpg" width="34%"></p>
 
 **胶卷仓库** — 库存计数，按过期时间由近到远排序，临近过期优先展示。新增时可以从 **29 款热门胶卷预设**里点选，型号、规格、ISO 一次填好；同型号同规格再次入库会累加数量而不是新增一条。
 
@@ -63,7 +62,7 @@ app/src/main/assets/index.html      ← 生成物，不要直接改
    WebView（https://appassets.androidplatform.net）
         │  @JavascriptInterface
         ▼
-   Bridge / DocStore / PhotoStore / Importer / Capture / Exporter / CutoutEngine
+   Bridge / DocStore / PhotoStore / Importer / Capture / Exporter
 ```
 
 为什么这么做：这套设计（长条底片、齿孔、片边代号、分段）本质上是**排版问题**，用 CSS 表达比用原生 View 表达短一个数量级。代价是桥接层要自己写，但换来的是一份代码同时跑在浏览器和手机上 —— `prototype/film-archive-app.html` 直接用 Chrome 打开就是**功能完整**的原型（有持久化、能导入照片、能导出），不是空壳演示。
@@ -73,7 +72,7 @@ app/src/main/assets/index.html      ← 生成物，不要直接改
 - **页面挂在真实 https 源上**（`WebViewAssetLoader`），不是 `file://`。这样照片能用普通 `<img>` 原生加载、WebView 自己缓存，而且 canvas 合成导出时不会被跨源污染（`file://` 加载的图画进 canvas 会 taint，`toDataURL()` 直接抛异常）。
 - **自写的 MIME 表**。`androidx.webkit` 自带的 `AssetsPathHandler` 靠 `URLConnection.guessContentTypeFromName` 猜类型，那张表里没有 `.woff2`，会把字体当 `text/plain` 发 —— 而字体加载失败是**静默**的，页面只是"看起来有点不一样"。
 - **持久化走原生文件**，`doc.json` 防抖 + 原子写（`tmp` → `fsync` → `rename`），`onPause` 同步 flush。`localStorage` 只作崩溃恢复镜像。
-- **MediaPipe 带进来的权限被摘掉了**。`tasks-vision` → `tasks-core` → `datatransport` 会在清单合并时带入 `INTERNET`、`ACCESS_NETWORK_STATE` 和一个 AlarmManager 定时上传调度器。清单里用 `tools:node="remove"` 全部移除 —— 一个宣称"不经过任何服务器"的 App 不能带这些。
+- **清单里没有 `INTERNET` 权限**。这一点是刻意维持的：曾经引入 MediaPipe 时它通过 `tasks-core` → `datatransport` 带进过 `INTERNET` 和一个 AlarmManager 定时上传调度器，后来用 `tools:node="remove"` 摘掉；抠图功能移除后这个依赖整个没有了。
 
 ---
 
@@ -91,7 +90,7 @@ app/src/main/assets/index.html      ← 生成物，不要直接改
 # 产物：out\filmbox.apk
 ```
 
-`build_apk.ps1` 会先跑 `build_assets.py`（从原型生成 `index.html`，并拉取 Space Mono 字体和 MediaPipe 模型），再走 Gradle 打包签名。
+`build_apk.ps1` 会先跑 `build_assets.py`（从原型生成 `index.html`，并拉取 Space Mono 字体），再走 Gradle 打包签名。
 
 签名密钥 `demo.keystore` 缺失时会自动生成一把。**别删** —— 换了钥匙就只能卸载重装，不能覆盖升级。
 
@@ -108,9 +107,7 @@ app/src/main/assets/index.html      ← 生成物，不要直接改
 ## 已知限制
 
 - **minSdk 29**（Android 10）。写相册用的 MediaStore `RELATIVE_PATH` + `IS_PENDING` 从 29 起不需要任何权限；24–28 要 `WRITE_EXTERNAL_STORAGE` 运行时授权，那条路径没有验证过，与其塞一段没测过的权限流程，不如把下限提上来。
-- **只打包 arm64-v8a**。MediaPipe 的原生库四个 ABI 加起来约 48 MB，只留 arm64 是必需不是优化。APK 因此约 25 MB。
-- **抠图用的是 `InteractiveSegmenterLegacy`**。新的 `InteractiveSegmenter` 要求 `.task` 打包格式（内部要 `interactive_segmentation_encoder.int8.tflite` 等一堆文件），而 `magic_touch` 只发布了裸 `.tflite`，官方模型库里没有对应的 `.task` 版本。裸模型只能配 legacy API。
-- 抠图对**背景干净的照片**效果最好（纯色桌面、白纸）。背景杂乱时会有残留。
+- **没有自动抠图**。曾经做过（MediaPipe Interactive Segmenter，端上推理），但效果达不到可用标准 —— 背景稍杂就抠不干净。已移除，改成「从相册选一张」或「用线稿」。移除后 APK 从 25 MB 降到 4.3 MB，也不再限制 ABI。
 - 中文界面。没有英文版。
 
 ---
@@ -124,10 +121,10 @@ app/src/main/assets/index.html      ← 生成物，不要直接改
           /photos/<rollId>/<pid>.jpg       展示副本（长边 ≤ 2048）
           /thumbs/<rollId>/<pid>.jpg       缩略图（长边 ≤ 360）
           /originals/<rollId>/<pid>.<ext>  原片（仅导入时勾选"保留原片"）
-          /gear/<gearId>.png               抠好的设备图（带 alpha）
+          /gear/<gearId>.png               设备照片（长边 ≤ 1600）
 ```
 
-**没有网络请求。** 抠图模型打进 APK 端上推理，导出直接写系统相册。清单里没有 `INTERNET` 权限 —— 可以用 `adb shell dumpsys package com.filmbox.archive | grep -i permission` 验证。
+**没有网络请求。** 导出直接写系统相册，照片只存在本机。清单里没有 `INTERNET` 权限 —— 可以用 `adb shell dumpsys package com.filmbox.archive | grep -i permission` 验证。
 
 ---
 
@@ -138,6 +135,6 @@ prototype/film-archive-app.html   界面全部代码（改这里）
 build_assets.py                   原型 → app assets 的生成器
 build_apk.ps1                     构建入口
 setup_toolchain.ps1               工具链安装
-app/src/main/java/…/              原生层（桥、存储、导入、抠图、导出）
+app/src/main/java/…/              原生层（桥、存储、导入、导出）
 docs/                             README 截图
 ```

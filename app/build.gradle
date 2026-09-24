@@ -18,12 +18,11 @@ android {
         targetSdk 34
         // 覆盖安装现有版本的前提：applicationId 不变 + 同一把签名密钥
         // 每次打包记得 +1 —— 构建脚本会把当前版本号打出来
-        versionCode 5
-        versionName '0.3.2'
+        versionCode 6
+        versionName '0.4.0'
 
-        // MediaPipe 的原生库四个 ABI 加起来约 48 MB，只留 arm64-v8a。
-        // 这不是优化，是必需。
-        ndk { abiFilters 'arm64-v8a' }
+        // 没有原生库了（MediaPipe 已移除），所以不限制 ABI ——
+        // arm64 / armeabi-v7a / x86_64 都能装。
     }
 
     signingConfigs {
@@ -76,15 +75,14 @@ dependencies {
     implementation 'androidx.webkit:webkit:1.14.0'
     implementation 'androidx.core:core:1.13.1'
 
-    // MediaPipe 的 Interactive Segmenter：点一下主体就把它抠出来。
+    // 抠图功能已移除。
     //
-    // 为什么不用 ML Kit 的主体分割：它是 unbundled 的，模型走 Google Play 服务
-    // 动态下载。国内手机要么没装 GMS，要么下不到模型，功能会直接失效。
-    // MediaPipe 是纯端上推理，模型打进 APK，运行时完全不联网。
+    // 用的是 MediaPipe Interactive Segmenter（magic_touch），端上推理、不联网，
+    // 但实际效果达不到可用标准 —— 背景稍杂就抠不干净，用户反馈「太差了」。
+    // 移除后 APK 从约 25 MB 降到约 4 MB（原生库 10.5 MB + 模型 5.9 MB 是大头），
+    // 顺带也不用再摘 INTERNET 权限了。
     //
-    // 这个依赖会通过 tasks-core -> datatransport 带进 INTERNET /
-    // ACCESS_NETWORK_STATE 和三个后台组件（含一个 AlarmManager 定时上传调度器）。
-    // 清单里用 tools:node="remove" 全部摘掉 —— 一个宣称"不经过任何服务器"的
-    // 归档 App 不能带这些。构建后要用 dumpsys 验证。
-    implementation 'com.google.mediapipe:tasks-vision:1.0.0'
+    // 如果以后要做，记得两件事：裸 .tflite 只能配 InteractiveSegmenterLegacy
+    // （新 API 要 .task 打包格式，magic_touch 没有），以及阈值下界不能低于 0.5，
+    // 否则背景噪点会以半透明形式渗进来。
 }
