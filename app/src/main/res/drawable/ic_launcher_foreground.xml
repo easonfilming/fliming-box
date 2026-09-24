@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 自适应图标前景：内容限制在中心 72×72 安全区内 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <path android:fillColor="#E5A03A" android:pathData="M22,40h64v28h-64z" />
+    <path android:fillColor="#2E2015" android:pathData="M29,46.5h50v15h-50z" />
+    <path android:fillColor="#15110D"
+        android:pathData="M25.5,41.8h5.5v3.2h-5.5zM36,41.8h5.5v3.2h-5.5zM46.5,41.8h5.5v3.2h-5.5zM57,41.8h5.5v3.2h-5.5zM67.5,41.8h5.5v3.2h-5.5zM78,41.8h5.5v3.2h-5.5z" />
+    <path android:fillColor="#15110D"
+        android:pathData="M25.5,63.2h5.5v3.2h-5.5zM36,63.2h5.5v3.2h-5.5zM46.5,63.2h5.5v3.2h-5.5zM57,63.2h5.5v3.2h-5.5zM67.5,63.2h5.5v3.2h-5.5zM78,63.2h5.5v3.2h-5.5z" />
+</vector>

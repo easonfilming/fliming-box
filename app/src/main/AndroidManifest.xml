@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  菲林档案
+  package / versionCode / versionName / uses-sdk 全部移到 app/build.gradle：
+  AGP 8 不接受清单里的 package，且版本号与 uses-sdk 由构建脚本单点管理。
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!--
+      MediaPipe 的依赖树（tasks-core -> datatransport）会在清单合并时带入
+      INTERNET / ACCESS_NETWORK_STATE 和三个后台组件，其中包括一个由
+      AlarmManager 驱动的定时上传调度器。
+
+      这个 App 的整个前提是"本地归档，不经过任何服务器"，不能带着这些。
+      用 tools:node="remove" 而不是 Gradle exclude：类还在 classpath 上，
+      万一哪天代码路径碰到了 TasksStatsLogger 也不会 NoClassDefFoundError。
+    -->
+    <uses-permission android:name="android.permission.INTERNET" tools:node="remove" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" tools:node="remove" />
+
+    <!--
+      API 30+ 的包可见性：不声明的话 startActivityForResult 调相机 Intent
+      会直接 ActivityNotFoundException。这不是权限，只是"声明我要找谁"。
+    -->
+    <queries>
+        <intent>
+            <action android:name="android.media.action.IMAGE_CAPTURE" />
+        </intent>
+    </queries>
+
+    <!--
+      刻意不声明 CAMERA 权限：一旦声明，ACTION_IMAGE_CAPTURE 就要求本应用
+      自己持有该权限，反而多出一道授权流程。不声明时由相机应用负责权限。
+    -->
+
+    <application
+        android:label="@string/app_name"
+        android:icon="@mipmap/ic_launcher"
+        android:theme="@android:style/Theme.Material.NoActionBar"
+        android:hardwareAccelerated="true"
+        android:allowBackup="true">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:screenOrientation="portrait"
+            android:configChanges="orientation|screenSize|keyboardHidden|uiMode|density|fontScale">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- 把私有 tmp 目录以 content:// 暴露给相机应用写拍照结果。
+             直接传 file:// URI 在 API 24+ 会抛 FileUriExposedException。 -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
+        <!-- 遥测组件：摘掉，见文件顶部说明 -->
+        <service
+            android:name="com.google.android.datatransport.runtime.backends.TransportBackendDiscovery"
+            tools:node="remove" />
+        <service
+            android:name="com.google.android.datatransport.runtime.scheduling.jobscheduling.JobInfoSchedulerService"
+            tools:node="remove" />
+        <receiver
+            android:name="com.google.android.datatransport.runtime.scheduling.jobscheduling.AlarmManagerSchedulerBroadcastReceiver"
+            tools:node="remove" />
+    </application>
+</manifest>

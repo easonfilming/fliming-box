@@ -1,0 +1,4445 @@
+<title>菲林档案</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@600;700;900&family=Space+Mono:wght@400;700&display=swap">
+
+<style>
+/* ============================================================
+   菲林档案 — design tokens
+   Light: 接触印相纸 (contact sheet on paper)
+   Dark : 暗房 (darkroom)
+   ============================================================ */
+:root{
+  color-scheme: light;
+  --ground:#E7DDCB;
+  --ground-2:#DED2BC;
+  --panel:#F6F0E4;
+  --panel-2:#EDE3D1;
+  --line:#D0C0A4;
+  --line-2:#BFAC8C;
+  --ink:#241C14;
+  --ink-2:#5C4E3C;
+  --ink-3:#8A7860;
+  --amber:#A96C12;
+  --amber-2:#C98A22;
+  --rust:#9E3418;
+  --sage:#55663F;
+  --dev-shadow: 0 40px 80px -32px rgba(48,32,12,.55), 0 8px 24px -12px rgba(48,32,12,.3);
+  --grain-op:.05;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme: dark;
+    --ground:#12100D;
+    --ground-2:#0B0908;
+    --panel:#1C1712;
+    --panel-2:#231C15;
+    --line:#3A2E21;
+    --line-2:#4C3D2B;
+    --ink:#F2E8D8;
+    --ink-2:#B4A088;
+    --ink-3:#7C6A55;
+    --amber:#E5A03A;
+    --amber-2:#F2B95E;
+    --rust:#D2553A;
+    --sage:#8AA06E;
+    --dev-shadow: 0 40px 90px -30px rgba(0,0,0,.9), 0 0 0 1px rgba(229,160,58,.06);
+    --grain-op:.055;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --ground:#12100D;
+  --ground-2:#0B0908;
+  --panel:#1C1712;
+  --panel-2:#231C15;
+  --line:#3A2E21;
+  --line-2:#4C3D2B;
+  --ink:#F2E8D8;
+  --ink-2:#B4A088;
+  --ink-3:#7C6A55;
+  --amber:#E5A03A;
+  --amber-2:#F2B95E;
+  --rust:#D2553A;
+  --sage:#8AA06E;
+  --dev-shadow: 0 40px 90px -30px rgba(0,0,0,.9), 0 0 0 1px rgba(229,160,58,.06);
+  --grain-op:.055;
+}
+
+*,*::before,*::after{box-sizing:border-box}
+
+/* [hidden] 必须显式压过组件自己的 display。
+   作者样式表里的 display:flex / display:grid 会盖掉 UA 样式表的
+   [hidden]{display:none} —— 作者规则永远赢过 UA 规则，与优先级无关。
+   不加这条，.sheetwrap（带全屏遮罩）和 .fab 会永远显示：
+   界面渲染正常，但遮罩挡住全部点击，表现就是"进去了但完全没反应"。 */
+[hidden]{display:none !important}
+body{
+  margin:0;
+  background:var(--ground);
+  background-image:
+    radial-gradient(120% 80% at 78% 0%, color-mix(in srgb, var(--amber) 9%, transparent), transparent 62%),
+    linear-gradient(var(--ground), var(--ground-2));
+  background-attachment:fixed;
+  color:var(--ink);
+  font-family:"Noto Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+
+.page{
+  max-width:1180px;
+  margin-inline:auto;
+  padding-inline:20px;
+  padding-block:48px 72px;
+  display:flex;
+  flex-direction:column;
+  gap:56px;
+}
+
+/* ---------- masthead ---------- */
+.hero{
+  display:grid;
+  grid-template-columns:minmax(0,1fr);
+  gap:44px;
+  align-items:start;
+}
+@media (min-width:960px){
+  .hero{grid-template-columns:minmax(0,1fr) 390px; gap:64px}
+}
+.eyebrow{
+  font-family:"Space Mono", ui-monospace, monospace;
+  font-size:11px;
+  letter-spacing:.22em;
+  text-transform:uppercase;
+  color:var(--amber);
+  margin:0 0 20px;
+  display:flex;
+  align-items:center;
+  gap:12px;
+}
+.eyebrow::after{
+  content:"";
+  flex:1;
+  height:1px;
+  background:repeating-linear-gradient(90deg, var(--line-2) 0 6px, transparent 6px 12px);
+}
+h1{
+  font-family:"Noto Serif SC", "Songti SC", "SimSun", serif;
+  font-weight:900;
+  font-size:clamp(46px, 8vw, 76px);
+  line-height:1.02;
+  letter-spacing:.02em;
+  margin:0 0 20px;
+  text-wrap:balance;
+}
+.lede{
+  font-size:16px;
+  line-height:1.85;
+  color:var(--ink-2);
+  max-width:44ch;
+  margin:0 0 30px;
+}
+.lede strong{color:var(--ink);font-weight:500}
+.tagrow{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:34px}
+.tag{
+  font-family:"Space Mono", ui-monospace, monospace;
+  font-size:11px;
+  letter-spacing:.08em;
+  padding:6px 11px;
+  border:1px solid var(--line);
+  border-radius:2px;
+  color:var(--ink-2);
+  background:var(--panel);
+}
+.factlist{display:flex;flex-direction:column;gap:0;border-top:1px solid var(--line);max-width:44ch}
+.fact{
+  display:grid;
+  grid-template-columns:88px minmax(0,1fr);
+  gap:16px;
+  padding-block:13px;
+  border-bottom:1px solid var(--line);
+  align-items:baseline;
+}
+.fact dt{
+  font-family:"Space Mono", ui-monospace, monospace;
+  font-size:11px;
+  letter-spacing:.12em;
+  color:var(--ink-3);
+  text-transform:uppercase;
+}
+.fact dd{margin:0;font-size:14px;line-height:1.6;color:var(--ink-2)}
+.fact dd b{font-weight:500;color:var(--ink)}
+
+/* ============================================================
+   DEVICE  — fixed darkroom world
+   ============================================================ */
+.stage{display:flex;justify-content:center}
+@media (min-width:960px){ .stage{position:sticky; top:48px} }
+
+.phone{
+  --bg:#15110D;
+  --bg2:#1D1712;
+  --card:#231B14;
+  --card2:#2C2219;
+  --bd:#3A2D21;
+  --bd2:#4A3A2B;
+  --tx:#F1E7D7;
+  --tx2:#A48F76;
+  --tx3:#6E5D4A;
+  --am:#E5A03A;
+  --am2:#F5C173;
+  --rust:#D2553A;
+  --sage:#8AA06E;
+  --filmb:#2E2015;
+  --filmb2:#3E2C1A;
+  --grain:none;
+
+  position:relative;
+  width:min(390px, 100%);
+  height:844px;
+  max-height:calc(100vh - 96px);
+  min-height:560px;
+  background:var(--bg);
+  color:var(--tx);
+  border-radius:44px;
+  border:1px solid #4A3A2B;
+  box-shadow:var(--dev-shadow), inset 0 0 0 8px #0C0907, inset 0 0 0 9px #33281D;
+  overflow:hidden;
+  display:flex;
+  flex-direction:column;
+  isolation:isolate;
+  font-family:"Noto Sans SC", system-ui, sans-serif;
+}
+@media (max-width:960px){
+  .phone{height:min(844px, 84vh)}
+}
+
+/* screen grain — one shared noise tile */
+.phone::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  z-index:60;
+  pointer-events:none;
+  background-image:var(--grain);
+  background-size:140px 140px;
+  opacity:.5;
+  mix-blend-mode:overlay;
+  border-radius:inherit;
+}
+
+.statusbar{
+  flex:0 0 auto;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:14px 30px 4px;
+  font-family:"Space Mono", ui-monospace, monospace;
+  font-size:12px;
+  letter-spacing:.04em;
+  color:var(--tx);
+  position:relative;
+  z-index:5;
+}
+.statusbar .sb-r{display:flex;align-items:center;gap:5px}
+.statusbar svg{display:block}
+
+/* ---------- screen / scroll ---------- */
+.screen{
+  flex:1 1 auto;
+  min-height:0;
+  overflow-y:auto;
+  overflow-x:hidden;
+  overscroll-behavior:contain;
+  scrollbar-width:none;
+  position:relative;
+}
+.screen::-webkit-scrollbar{width:0}
+.scrollpad{padding:0 18px 26px}
+
+/* ---------- nav ---------- */
+.nav{
+  flex:0 0 auto;
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  background:rgba(20,15,11,.92);
+  backdrop-filter:blur(14px);
+  border-top:1px solid var(--bd);
+  padding:9px 6px 0;
+  position:relative;
+  z-index:20;
+}
+.nav-b{
+  background:none;
+  border:0;
+  padding:5px 2px 4px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:4px;
+  color:var(--tx3);
+  cursor:pointer;
+  border-radius:10px;
+  transition:color .16s;
+  font-family:inherit;
+}
+.nav-b span{font-size:10px;letter-spacing:.06em}
+.nav-b svg{width:21px;height:21px}
+.nav-b[aria-current="true"]{color:var(--am)}
+.nav-b:focus-visible{outline:2px solid var(--am);outline-offset:-2px}
+.homebar{
+  flex:0 0 auto;
+  height:22px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:rgba(20,15,11,.92);
+  position:relative;
+  z-index:20;
+}
+.homebar i{display:block;width:118px;height:4px;border-radius:4px;background:#544435}
+
+/* ---------- shared bits ---------- */
+.hd{
+  padding:8px 18px 14px;
+  display:flex;
+  align-items:flex-end;
+  justify-content:space-between;
+  gap:12px;
+}
+.hd h2{
+  font-family:"Noto Serif SC", "Songti SC", serif;
+  font-weight:900;
+  font-size:27px;
+  letter-spacing:.02em;
+  margin:0;
+  line-height:1.1;
+}
+.hd .sub{
+  font-family:"Space Mono", ui-monospace, monospace;
+  font-size:10.5px;
+  letter-spacing:.1em;
+  color:var(--tx3);
+  margin-top:5px;
+}
+.iconbtn{
+  width:34px;height:34px;
+  flex:0 0 auto;
+  display:grid;place-items:center;
+  border:1px solid var(--bd);
+  background:var(--card);
+  color:var(--tx2);
+  border-radius:9px;
+  cursor:pointer;
+  transition:.16s;
+}
+.iconbtn:hover{color:var(--am);border-color:var(--bd2)}
+.iconbtn:focus-visible{outline:2px solid var(--am);outline-offset:1px}
+.iconbtn svg{width:17px;height:17px}
+
+.segctl{
+  display:inline-flex;
+  border:1px solid var(--bd);
+  border-radius:9px;
+  overflow:hidden;
+  background:var(--card);
+}
+.segctl button{
+  border:0;
+  background:none;
+  color:var(--tx2);
+  font-family:inherit;
+  font-size:12.5px;
+  padding:7px 15px;
+  cursor:pointer;
+  transition:.15s;
+  white-space:nowrap;
+}
+.segctl button+button{border-left:1px solid var(--bd)}
+.segctl button[aria-pressed="true"]{background:var(--am);color:#1A1208;font-weight:500}
+.segctl button:focus-visible{outline:2px solid var(--am);outline-offset:-2px}
+
+.chiprow{
+  display:flex;
+  gap:7px;
+  overflow-x:auto;
+  scrollbar-width:none;
+  padding:0 18px 14px;
+  margin:0;
+}
+.chiprow::-webkit-scrollbar{height:0}
+.chip{
+  flex:0 0 auto;
+  border:1px solid var(--bd);
+  background:var(--card);
+  color:var(--tx2);
+  font-family:inherit;
+  font-size:12px;
+  padding:6px 12px;
+  border-radius:100px;
+  cursor:pointer;
+  transition:.15s;
+  white-space:nowrap;
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+}
+.chip svg{width:12px;height:12px}
+.chip[aria-pressed="true"]{background:var(--am);border-color:var(--am);color:#1A1208;font-weight:500}
+.chip:focus-visible{outline:2px solid var(--am);outline-offset:1px}
+
+/* ============================================================
+   FILM STRIP
+   ============================================================ */
+.filmview{position:relative;background:var(--filmb);border-block:1px solid #4A3722}
+.emptyfilm{
+  padding:46px 20px;
+  text-align:center;
+  color:var(--tx3);
+  font-size:13px;
+  line-height:2;
+}
+.emptyfilm span{font-size:11.5px;opacity:.75}
+.stripwrap{
+  overflow-x:auto;
+  overflow-y:hidden;
+  scrollbar-width:none;
+  -webkit-overflow-scrolling:touch;
+}
+.stripwrap::-webkit-scrollbar{height:0}
+.strip{width:max-content;padding-inline:14px;background:
+  linear-gradient(180deg,#33240F 0%,#4A3418 8%,#3A2812 50%,#4A3418 92%,#33240F 100%);}
+.perf{
+  display:block;
+  height:19px;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='19'%3E%3Crect x='4' y='4.5' width='15.5' height='10' rx='2.6' fill='%23F1E7D7' fill-opacity='0.9'/%3E%3C/svg%3E");
+  background-repeat:repeat-x;
+  background-position:center;
+}
+.perf.top{background-position-y:2px}
+.perf.bot{background-position-y:-1px}
+.stripmid{padding-inline:8px; position:relative}
+.cutline{
+  position:absolute;
+  top:0;
+  bottom:0;
+  width:0;
+  border-left:1px dashed rgba(241,231,215,.42);
+  pointer-events:none;
+}
+
+.segs{display:flex;gap:var(--gap);margin-bottom:7px}
+.segbar{
+  height:25px;
+  border:1px solid #6A4E28;
+  border-left:3px solid var(--am);
+  border-radius:3px;
+  background:rgba(229,160,58,.09);
+  color:var(--am2);
+  font-size:10.5px;
+  display:flex;
+  align-items:center;
+  gap:5px;
+  padding:0 8px;
+  overflow:hidden;
+  white-space:nowrap;
+  cursor:pointer;
+  font-family:inherit;
+  transition:.15s;
+}
+.segbar:hover{background:rgba(229,160,58,.2)}
+.segbar:focus-visible{outline:2px solid var(--am);outline-offset:1px}
+.segbar svg{width:11px;height:11px;flex:0 0 auto}
+.segbar b{font-weight:400;overflow:hidden;text-overflow:ellipsis}
+.segbar i{
+  font-style:normal;
+  font-family:"Space Mono", monospace;
+  font-size:9.5px;
+  opacity:.7;
+  margin-left:auto;
+  padding-left:6px;
+}
+
+.frames{display:flex;gap:var(--gap);align-items:flex-start}
+.fr{
+  flex:0 0 auto;
+  background:none;
+  border:0;
+  padding:0;
+  cursor:pointer;
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+  font-family:inherit;
+}
+.fr:focus-visible{outline:2px solid var(--am);outline-offset:2px}
+.frbox{
+  position:relative;
+  overflow:hidden;
+  background:#0E0A06;
+  box-shadow:inset 0 0 0 1px rgba(0,0,0,.6);
+}
+.frbox svg{display:block;width:100%;height:100%}
+/* 真实照片铺满格位、居中裁切。合成 SVG 和真实 <img> 走同一个盒模型，
+   所以底片条的几何完全不受影响。 */
+.frbox img.ph, .mini-f img.ph, .rowthumb img.ph,
+.framebig img.ph, .wm-photo img.ph{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  display:block;
+}
+.frbox::after{
+  content:"";
+  position:absolute;inset:0;
+  background:radial-gradient(115% 100% at 50% 42%, transparent 42%, rgba(0,0,0,.42) 100%);
+  pointer-events:none;
+}
+.frnum{
+  font-family:"Space Mono", ui-monospace, monospace;
+  font-size:10px;
+  letter-spacing:.1em;
+  color:var(--am);
+  text-align:center;
+  opacity:.9;
+  line-height:1;
+  padding-bottom:2px;
+}
+
+.striptag{
+  position:absolute;
+  top:2px;
+  left:12px;
+  font-family:"Space Mono", ui-monospace, monospace;
+  font-size:9.5px;
+  letter-spacing:.16em;
+  color:var(--am2);
+  pointer-events:none;
+  z-index:3;
+  background:#3A2812;
+  padding:3px 9px 3px 7px;
+  border-radius:2px;
+}
+.striphint{
+  position:absolute;
+  right:12px;
+  top:2px;
+  font-family:"Space Mono", monospace;
+  font-size:9.5px;
+  letter-spacing:.1em;
+  color:rgba(241,231,215,.55);
+  pointer-events:none;
+  z-index:3;
+  background:#3A2812;
+  padding:3px 7px 3px 9px;
+  border-radius:2px;
+}
+
+/* mini strip (list cards) */
+.mini{
+  display:block;
+  background:linear-gradient(180deg,#33240F,#4A3418 12%,#3A2812 88%,#33240F);
+  padding-block:9px;
+  overflow:hidden;
+}
+.mini .perf{height:13px;background-size:17px 13px}
+.mini .perf.top{background-position-y:1px}
+.mini .perf.bot{background-position-y:-1px}
+.mini-frames{
+  display:flex;
+  gap:5px;
+  padding-inline:12px;
+  height:88px;
+  align-items:center;
+}
+.mini-f{
+  display:block;
+  flex:0 0 auto;
+  overflow:hidden;
+  background:#0E0A06;
+  box-shadow:inset 0 0 0 1px rgba(0,0,0,.5);
+}
+.mini-f svg{display:block;width:100%;height:100%}
+
+/* ============================================================
+   CARDS / LISTS
+   ============================================================ */
+.card{
+  display:block;
+  width:100%;
+  text-align:left;
+  background:var(--card);
+  border:1px solid var(--bd);
+  border-radius:13px;
+  overflow:hidden;
+  padding:0;
+  cursor:pointer;
+  color:inherit;
+  font-family:inherit;
+  transition:border-color .16s, transform .16s;
+}
+.card+.card{margin-top:12px}
+.card:hover{border-color:var(--bd2)}
+.card:active{transform:scale(.994)}
+.card:focus-visible{outline:2px solid var(--am);outline-offset:2px}
+.card-b{display:block;padding:12px 14px 13px}
+.card-r1{display:flex;align-items:center;gap:9px;margin-bottom:6px}
+.filmname{
+  font-family:"Space Mono", ui-monospace, monospace;
+  font-size:12.5px;
+  letter-spacing:.06em;
+  color:var(--tx);
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  min-width:0;
+}
+.specbadge{
+  flex:0 0 auto;
+  margin-left:auto;
+  font-family:"Space Mono", monospace;
+  font-size:10px;
+  letter-spacing:.08em;
+  padding:2px 7px;
+  border:1px solid var(--bd2);
+  border-radius:3px;
+  color:var(--am);
+}
+.card-r2{
+  font-size:12.5px;
+  color:var(--tx2);
+  display:flex;
+  align-items:center;
+  gap:7px;
+  margin-bottom:8px;
+  overflow:hidden;
+  white-space:nowrap;
+}
+.card-r2 em{font-style:normal;color:var(--tx3)}
+.dotsep{width:3px;height:3px;border-radius:50%;background:var(--tx3);flex:0 0 auto}
+.card-r3{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.srcchip{
+  display:inline-flex;
+  align-items:center;
+  gap:4px;
+  font-size:10.5px;
+  padding:3px 8px;
+  border-radius:100px;
+  background:rgba(229,160,58,.12);
+  color:var(--am2);
+  border:1px solid rgba(229,160,58,.24);
+  white-space:nowrap;
+}
+.srcchip svg{width:11px;height:11px}
+.card-r3 .lab{
+  font-size:11px;
+  color:var(--tx3);
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  min-width:0;
+}
+
+.grp{margin-top:22px}
+.grp:first-child{margin-top:4px}
+.grp-h{
+  display:flex;
+  align-items:baseline;
+  gap:10px;
+  padding-bottom:8px;
+  margin-bottom:10px;
+  border-bottom:1px solid var(--bd);
+}
+.grp-t{
+  font-family:"Space Mono", monospace;
+  font-size:12px;
+  letter-spacing:.08em;
+  color:var(--tx);
+}
+.grp-c{margin-left:auto;font-size:11px;color:var(--tx3)}
+
+.row{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  width:100%;
+  text-align:left;
+  background:var(--card);
+  border:1px solid var(--bd);
+  border-radius:11px;
+  padding:11px 13px;
+  cursor:pointer;
+  color:inherit;
+  font-family:inherit;
+  transition:border-color .16s;
+}
+.row+.row{margin-top:8px}
+.row:hover{border-color:var(--bd2)}
+.row:focus-visible{outline:2px solid var(--am);outline-offset:2px}
+.rowthumb{
+  flex:0 0 auto;
+  width:46px;height:46px;
+  border-radius:6px;
+  overflow:hidden;
+  background:#0E0A06;
+  box-shadow:inset 0 0 0 1px rgba(0,0,0,.5);
+}
+.rowthumb svg{display:block;width:100%;height:100%}
+.rowbody{min-width:0;flex:1}
+.rowt{
+  display:block;
+  font-family:"Space Mono", monospace;
+  font-size:12px;
+  letter-spacing:.05em;
+  color:var(--tx);
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.rows{
+  display:block;
+  font-size:11.5px;
+  color:var(--tx3);
+  margin-top:3px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.rowend{
+  flex:0 0 auto;
+  font-family:"Space Mono", monospace;
+  font-size:11px;
+  color:var(--tx3);
+  text-align:right;
+  display:flex;
+  align-items:center;
+}
+.rowend svg{width:14px;height:14px;display:block}
+
+/* ============================================================
+   ROLL DETAIL
+   ============================================================ */
+.topbar{
+  display:flex;
+  align-items:center;
+  gap:11px;
+  padding:6px 14px 12px;
+}
+.topbar .tt{
+  min-width:0;
+  flex:1;
+  font-family:"Space Mono", monospace;
+  font-size:12px;
+  letter-spacing:.08em;
+  color:var(--tx);
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+
+.boxlabel{
+  margin:0 18px 16px;
+  border:1px solid var(--bd2);
+  border-radius:12px;
+  background:
+    linear-gradient(180deg, rgba(229,160,58,.07), transparent 42%),
+    var(--card);
+  overflow:hidden;
+}
+.bl-top{
+  display:flex;
+  align-items:flex-start;
+  gap:12px;
+  padding:14px 15px 12px;
+  border-bottom:1px dashed var(--bd2);
+}
+.bl-film{
+  font-family:"Space Mono", monospace;
+  font-size:14px;
+  letter-spacing:.08em;
+  color:var(--am);
+  line-height:1.3;
+}
+.bl-sub{
+  font-family:"Space Mono", monospace;
+  font-size:9.5px;
+  letter-spacing:.14em;
+  color:var(--tx3);
+  margin-top:5px;
+}
+.bl-spec{
+  margin-left:auto;
+  flex:0 0 auto;
+  font-family:"Space Mono", monospace;
+  font-size:15px;
+  letter-spacing:.06em;
+  color:var(--tx2);
+  border:1px solid var(--bd2);
+  border-radius:5px;
+  padding:4px 9px;
+}
+.bl-grid{
+  display:grid;
+  grid-template-columns:repeat(2, minmax(0,1fr));
+  gap:1px;
+  background:var(--bd);
+  margin:0;
+}
+.bl-grid>div{background:var(--card);padding:10px 14px;min-width:0}
+.bl-grid dt{
+  font-size:10px;
+  letter-spacing:.1em;
+  color:var(--tx3);
+  margin-bottom:4px;
+}
+.bl-grid dd{
+  margin:0;
+  font-size:12.5px;
+  color:var(--tx);
+  line-height:1.45;
+  overflow-wrap:anywhere;
+}
+.bl-grid dd.mono{font-family:"Space Mono", monospace;font-size:12px;letter-spacing:.02em}
+.bl-grid dd .dim{display:block;color:var(--tx3);font-size:11.5px;margin-top:2px}
+.bl-edit{
+  width:100%;
+  border:0;
+  border-top:1px dashed var(--bd2);
+  background:none;
+  color:var(--am);
+  font-family:inherit;
+  font-size:12px;
+  padding:11px;
+  cursor:pointer;
+  transition:.15s;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:6px;
+}
+.bl-edit svg{width:13px;height:13px}
+.bl-edit:hover{background:rgba(229,160,58,.1)}
+.bl-edit:focus-visible{outline:2px solid var(--am);outline-offset:-2px}
+
+.sec-h{
+  display:flex;
+  align-items:center;
+  gap:9px;
+  padding:20px 18px 10px;
+}
+.sec-h h3{
+  font-size:12px;
+  letter-spacing:.14em;
+  color:var(--tx3);
+  font-weight:500;
+  margin:0;
+  text-transform:uppercase;
+  font-family:"Space Mono", monospace;
+}
+.sec-h .rule{flex:1;height:1px;background:var(--bd)}
+.sec-h button{
+  border:1px solid var(--bd2);
+  background:var(--card);
+  color:var(--am);
+  font-family:inherit;
+  font-size:11.5px;
+  padding:4px 10px;
+  border-radius:7px;
+  cursor:pointer;
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  transition:.15s;
+}
+.sec-h button svg{width:12px;height:12px}
+.sec-h button:hover{background:rgba(229,160,58,.12)}
+.sec-h button:focus-visible{outline:2px solid var(--am);outline-offset:1px}
+
+.seglist{padding:0 18px}
+.segitem{
+  display:flex;
+  align-items:center;
+  gap:11px;
+  width:100%;
+  text-align:left;
+  background:var(--card);
+  border:1px solid var(--bd);
+  border-left:3px solid var(--am);
+  border-radius:9px;
+  padding:11px 13px;
+  cursor:pointer;
+  color:inherit;
+  font-family:inherit;
+  transition:.15s;
+}
+.segitem+.segitem{margin-top:8px}
+.segitem:hover{border-color:var(--bd2);border-left-color:var(--am)}
+.segitem:focus-visible{outline:2px solid var(--am);outline-offset:2px}
+.segitem .loc{font-size:13.5px;color:var(--tx)}
+.segitem .rng{
+  font-family:"Space Mono", monospace;
+  font-size:10.5px;
+  color:var(--tx3);
+  margin-top:4px;
+}
+.segitem .cnt{
+  margin-left:auto;
+  font-family:"Space Mono", monospace;
+  font-size:10.5px;
+  color:var(--tx3);
+  border:1px solid var(--bd);
+  border-radius:4px;
+  padding:3px 7px;
+  flex:0 0 auto;
+}
+
+.actionbar{
+  position:sticky;
+  bottom:0;
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:9px;
+  padding:12px 18px 14px;
+  margin-top:22px;
+  background:linear-gradient(180deg, rgba(21,17,13,0), var(--bg) 34%);
+}
+.btn{
+  border:1px solid var(--bd2);
+  background:var(--card2);
+  color:var(--tx);
+  font-family:inherit;
+  font-size:12.5px;
+  padding:11px 12px;
+  border-radius:10px;
+  cursor:pointer;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:7px;
+  transition:.15s;
+}
+.btn svg{width:15px;height:15px;flex:0 0 auto}
+.btn:hover{border-color:var(--am);color:var(--am2)}
+.btn:focus-visible{outline:2px solid var(--am);outline-offset:2px}
+.btn.primary{background:var(--am);border-color:var(--am);color:#1A1208;font-weight:500}
+.btn.primary:hover{background:var(--am2);color:#1A1208}
+.btn.ghost{background:none}
+.btn.block{width:100%}
+
+/* ============================================================
+   CALENDAR
+   ============================================================ */
+.calnav{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  padding:0 18px 14px;
+}
+.calnav .ym{
+  font-family:"Space Mono", monospace;
+  font-size:16px;
+  letter-spacing:.08em;
+  color:var(--tx);
+}
+.calnav .ym small{font-size:11px;color:var(--tx3);letter-spacing:.1em}
+.calnav .sp{flex:1}
+.calstats{
+  display:grid;
+  grid-template-columns:repeat(3, minmax(0,1fr));
+  gap:1px;
+  background:var(--bd);
+  border:1px solid var(--bd);
+  border-radius:11px;
+  overflow:hidden;
+  margin:0 18px 16px;
+}
+.calstats>div{background:var(--card);padding:12px 13px;min-width:0}
+.calstats .k{font-size:10px;letter-spacing:.1em;color:var(--tx3);margin-bottom:6px}
+.calstats .v{
+  font-family:"Space Mono", monospace;
+  font-size:21px;
+  color:var(--am);
+  line-height:1;
+  font-variant-numeric:tabular-nums;
+}
+.calstats .v u{font-size:11px;text-decoration:none;color:var(--tx3);margin-left:3px}
+
+.cal{margin:0 18px}
+.cal-dow{
+  display:grid;
+  grid-template-columns:repeat(7, minmax(0,1fr));
+  gap:2px;
+  margin-bottom:6px;
+}
+.cal-dow span{
+  text-align:center;
+  font-size:10px;
+  letter-spacing:.1em;
+  color:var(--tx3);
+  font-family:"Space Mono", monospace;
+}
+.cal-grid{
+  display:grid;
+  grid-template-columns:repeat(7, minmax(0,1fr));
+  gap:2px;
+}
+.cal-d{
+  aspect-ratio:1;
+  max-width:100%;
+  border:1px solid transparent;
+  background:none;
+  border-radius:8px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:3px;
+  cursor:default;
+  color:var(--tx3);
+  font-family:"Space Mono", monospace;
+  font-size:12px;
+  padding:0;
+  transition:.15s;
+  font-variant-numeric:tabular-nums;
+}
+.cal-d.pad{visibility:hidden}
+.cal-d.has{
+  cursor:pointer;
+  color:var(--tx);
+  background:rgba(229,160,58,.09);
+  border-color:rgba(229,160,58,.28);
+}
+.cal-d.has:hover{background:rgba(229,160,58,.2)}
+.cal-d.has:focus-visible{outline:2px solid var(--am);outline-offset:1px}
+.cal-d[aria-pressed="true"]{background:var(--am);border-color:var(--am);color:#1A1208;font-weight:700}
+.cal-d .cnt{
+  font-size:9px;
+  line-height:1;
+  color:var(--am);
+  display:flex;
+  gap:2px;
+}
+.cal-d[aria-pressed="true"] .cnt{color:#1A1208}
+.cal-d .cnt i{width:4px;height:4px;border-radius:50%;background:currentColor;display:block}
+
+.yearbars{margin:22px 18px 0}
+.yearbars .yb-h{
+  display:flex;
+  align-items:baseline;
+  gap:9px;
+  margin-bottom:12px;
+}
+.yearbars .yb-h h3{
+  margin:0;
+  font-size:12px;
+  letter-spacing:.14em;
+  color:var(--tx3);
+  font-family:"Space Mono", monospace;
+  font-weight:400;
+  text-transform:uppercase;
+}
+.yearbars .yb-h .rule{flex:1;height:1px;background:var(--bd)}
+.yearbars .yb-h em{font-style:normal;font-size:10.5px;color:var(--tx3);font-family:"Space Mono",monospace}
+.yb{
+  display:grid;
+  grid-template-columns:repeat(12, minmax(0,1fr));
+  gap:5px;
+  align-items:end;
+  height:76px;
+}
+.yb-c{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:flex-end;
+  gap:5px;
+  height:100%;
+}
+.yb-bar{
+  width:100%;
+  border-radius:3px 3px 1px 1px;
+  background:linear-gradient(180deg, var(--am), rgba(229,160,58,.32));
+  min-height:3px;
+}
+.yb-bar.zero{background:var(--bd);min-height:3px}
+.yb-c.cur .yb-bar{background:linear-gradient(180deg, var(--am2), var(--am))}
+.yb-l{
+  font-family:"Space Mono", monospace;
+  font-size:9px;
+  color:var(--tx3);
+  line-height:1;
+}
+.yb-c.cur .yb-l{color:var(--am)}
+
+/* ============================================================
+   GEAR / STOCK
+   ============================================================ */
+.geargrid{
+  display:grid;
+  grid-template-columns:repeat(2, minmax(0,1fr));
+  gap:11px;
+  padding:0 18px;
+}
+.gearcard{
+  background:var(--card);
+  border:1px solid var(--bd);
+  border-radius:13px;
+  padding:0;
+  overflow:hidden;
+  cursor:pointer;
+  text-align:left;
+  color:inherit;
+  font-family:inherit;
+  transition:.16s;
+  display:flex;
+  flex-direction:column;
+}
+.gearcard:hover{border-color:var(--bd2)}
+.gearcard:focus-visible{outline:2px solid var(--am);outline-offset:2px}
+.gearshot{
+  aspect-ratio:1/.82;
+  max-width:100%;
+  display:grid;
+  place-items:center;
+  background:
+    radial-gradient(62% 52% at 50% 46%, rgba(229,160,58,.16), transparent 72%),
+    repeating-conic-gradient(from 45deg, rgba(255,255,255,.022) 0% 25%, transparent 0% 50%) 0 0/12px 12px,
+    #191410;
+  position:relative;
+  border-bottom:1px solid var(--bd);
+}
+.gearshot svg{width:78%;height:78%;max-width:100%;display:block;overflow:visible}
+/* 同上：设备图用 contain，整个轮廓都要在 */
+.gearshot img{
+  width:78%;
+  height:78%;
+  max-width:100%;
+  object-fit:contain;
+  display:block;
+}
+.cutbadge{
+  position:absolute;
+  top:8px;right:8px;
+  font-size:9px;
+  letter-spacing:.08em;
+  padding:3px 6px;
+  border-radius:4px;
+  background:rgba(138,160,110,.16);
+  color:var(--sage);
+  border:1px solid rgba(138,160,110,.35);
+  display:inline-flex;
+  align-items:center;
+  gap:3px;
+  font-family:"Space Mono", monospace;
+}
+.cutbadge svg{width:9px;height:9px}
+.gearbody{padding:11px 12px 13px}
+.gearname{font-size:13px;color:var(--tx);line-height:1.35;overflow-wrap:anywhere}
+.gearsub{font-size:10.5px;color:var(--tx3);margin-top:5px;font-family:"Space Mono", monospace;letter-spacing:.03em}
+.gearmeta{
+  display:flex;
+  align-items:center;
+  gap:7px;
+  margin-top:9px;
+  padding-top:9px;
+  border-top:1px dashed var(--bd);
+  font-family:"Space Mono", monospace;
+  font-size:10.5px;
+  color:var(--tx2);
+}
+.gearmeta .kind{
+  font-size:9.5px;
+  padding:2px 6px;
+  border-radius:3px;
+  border:1px solid var(--bd2);
+  color:var(--tx3);
+}
+
+.fab{
+  position:absolute;
+  right:18px;
+  bottom:88px;
+  width:52px;height:52px;
+  border-radius:50%;
+  border:0;
+  background:var(--am);
+  color:#1A1208;
+  display:grid;
+  place-items:center;
+  cursor:pointer;
+  box-shadow:0 12px 26px -8px rgba(0,0,0,.8), 0 0 0 1px rgba(229,160,58,.4);
+  z-index:25;
+  transition:.16s;
+}
+.fab svg{width:23px;height:23px}
+.fab:hover{background:var(--am2);transform:translateY(-1px)}
+.fab:focus-visible{outline:2px solid var(--am2);outline-offset:3px}
+
+.stockstats{
+  display:grid;
+  grid-template-columns:repeat(3, minmax(0,1fr));
+  gap:1px;
+  background:var(--bd);
+  border:1px solid var(--bd);
+  border-radius:11px;
+  overflow:hidden;
+  margin:0 18px 14px;
+}
+.stockstats>div{background:var(--card);padding:12px 13px;min-width:0}
+.stockstats .k{font-size:10px;letter-spacing:.1em;color:var(--tx3);margin-bottom:6px}
+.stockstats .v{
+  font-family:"Space Mono", monospace;
+  font-size:21px;
+  color:var(--tx);
+  line-height:1;
+  font-variant-numeric:tabular-nums;
+}
+.stockstats>div.warn .v{color:var(--rust)}
+.sorthint{
+  margin:0 18px 12px;
+  font-family:"Space Mono", monospace;
+  font-size:10px;
+  letter-spacing:.09em;
+  color:var(--tx3);
+  display:flex;
+  align-items:center;
+  gap:7px;
+}
+.sorthint svg{width:12px;height:12px;flex:0 0 auto}
+
+.stocklist{padding:0 18px}
+.stockrow{
+  display:block;
+  width:100%;
+  text-align:left;
+  background:var(--card);
+  border:1px solid var(--bd);
+  border-radius:11px;
+  padding:12px 13px;
+  cursor:pointer;
+  color:inherit;
+  font-family:inherit;
+  transition:.16s;
+}
+.stockrow+.stockrow{margin-top:8px}
+.stockrow:hover{border-color:var(--bd2)}
+.stockrow:focus-visible{outline:2px solid var(--am);outline-offset:2px}
+.stockrow.urgent{border-color:rgba(210,85,58,.5);background:linear-gradient(90deg, rgba(210,85,58,.1), transparent 62%), var(--card)}
+.stockrow.soon{border-color:rgba(229,160,58,.42)}
+.sr-top{display:flex;align-items:center;gap:8px}
+.sr-name{
+  font-family:"Space Mono", monospace;
+  font-size:12.5px;
+  letter-spacing:.05em;
+  color:var(--tx);
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  min-width:0;
+}
+.sr-qty{
+  margin-left:auto;
+  flex:0 0 auto;
+  font-family:"Space Mono", monospace;
+  font-size:12.5px;
+  color:var(--tx2);
+  font-variant-numeric:tabular-nums;
+}
+.sr-mid{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  margin-top:8px;
+  font-size:11px;
+  color:var(--tx3);
+}
+.sr-mid .iso{font-family:"Space Mono", monospace}
+.expchip{
+  margin-left:auto;
+  flex:0 0 auto;
+  font-family:"Space Mono", monospace;
+  font-size:10.5px;
+  padding:3px 8px;
+  border-radius:100px;
+  border:1px solid var(--bd2);
+  color:var(--tx2);
+  white-space:nowrap;
+  font-variant-numeric:tabular-nums;
+}
+.expchip.u{background:rgba(210,85,58,.16);border-color:rgba(210,85,58,.5);color:#F08A72}
+.expchip.s{background:rgba(229,160,58,.14);border-color:rgba(229,160,58,.44);color:var(--am2)}
+.urgbar{
+  display:block;
+  height:3px;
+  border-radius:3px;
+  background:var(--bd);
+  margin-top:11px;
+  overflow:hidden;
+}
+.urgbar i{display:block;height:100%;border-radius:3px;background:var(--tx3)}
+.urgbar.u i{background:var(--rust)}
+.urgbar.s i{background:var(--am)}
+
+/* ============================================================
+   SHEETS
+   ============================================================ */
+.sheetwrap{
+  position:absolute;
+  inset:0;
+  z-index:50;
+  display:flex;
+  flex-direction:column;
+  justify-content:flex-end;
+}
+.scrim{
+  position:absolute;
+  inset:0;
+  background:rgba(8,6,4,.68);
+  backdrop-filter:blur(2px);
+  border:0;
+  padding:0;
+  cursor:pointer;
+  animation:fade .2s ease both;
+}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+@keyframes rise{from{transform:translateY(14px);opacity:0}to{transform:translateY(0);opacity:1}}
+.sheet{
+  position:relative;
+  background:var(--bg2);
+  border-top:1px solid var(--bd2);
+  border-radius:20px 20px 0 0;
+  padding:10px 18px 20px;
+  max-height:82%;
+  overflow-y:auto;
+  scrollbar-width:none;
+  box-shadow:0 -20px 50px -18px rgba(0,0,0,.85);
+  animation:rise .24s cubic-bezier(.22,1,.36,1) both;
+}
+.sheet::-webkit-scrollbar{width:0}
+.grab{
+  width:38px;height:4px;
+  border-radius:4px;
+  background:var(--bd2);
+  margin:0 auto 14px;
+}
+.sheet h3{
+  font-family:"Noto Serif SC", "Songti SC", serif;
+  font-weight:700;
+  font-size:19px;
+  margin:0 0 4px;
+  color:var(--tx);
+}
+.sheet .sh-sub{font-size:12px;color:var(--tx3);margin-bottom:18px;line-height:1.6}
+/* 内联在文字段落里的图标必须显式给尺寸。
+   SVG 没有 width/height 属性时会默认撑满容器 —— 一个 24×24 的图标
+   能把整屏占掉。 */
+.sh-sub svg{
+  width:13px;
+  height:13px;
+  vertical-align:-2px;
+  margin-right:3px;
+  flex:0 0 auto;
+}
+.field{margin-bottom:15px}
+.field label{
+  display:block;
+  font-size:10.5px;
+  letter-spacing:.12em;
+  color:var(--tx3);
+  margin-bottom:7px;
+  font-family:"Space Mono", monospace;
+  text-transform:uppercase;
+}
+.field input[type="text"], .field input[type="date"], .field select{
+  width:100%;
+  background:var(--card);
+  border:1px solid var(--bd2);
+  border-radius:9px;
+  color:var(--tx);
+  font-family:inherit;
+  font-size:13.5px;
+  padding:10px 12px;
+  outline:none;
+  transition:border-color .15s;
+}
+.field input:focus, .field select:focus{border-color:var(--am)}
+.field input::placeholder{color:var(--tx3)}
+.field .hint{
+  font-size:10.5px;
+  color:var(--tx3);
+  margin-top:6px;
+  line-height:1.55;
+  display:flex;
+  align-items:flex-start;
+  gap:5px;
+}
+.field .hint svg{width:12px;height:12px;flex:0 0 auto;margin-top:1px;color:var(--am)}
+.fieldrow{display:grid;grid-template-columns:1fr 1fr;gap:11px}
+.sheet-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:20px}
+.sheet-actions.single{grid-template-columns:1fr}
+
+.opts{display:flex;flex-direction:column;gap:9px}
+.opt{
+  display:flex;
+  align-items:center;
+  gap:13px;
+  width:100%;
+  text-align:left;
+  background:var(--card);
+  border:1px solid var(--bd);
+  border-radius:12px;
+  padding:13px 14px;
+  cursor:pointer;
+  color:inherit;
+  font-family:inherit;
+  transition:.15s;
+}
+.opt:hover{border-color:var(--am)}
+.opt:focus-visible{outline:2px solid var(--am);outline-offset:2px}
+.opt .oi{
+  flex:0 0 auto;
+  width:36px;height:36px;
+  border-radius:9px;
+  display:grid;place-items:center;
+  background:rgba(229,160,58,.13);
+  color:var(--am);
+}
+.opt .oi svg{width:18px;height:18px}
+.opt .ot{font-size:13.5px;color:var(--tx)}
+.opt .os{font-size:11px;color:var(--tx3);margin-top:3px;line-height:1.5}
+.opt .oa{margin-left:auto;color:var(--tx3);flex:0 0 auto}
+.opt .oa svg{width:15px;height:15px;display:block}
+
+/* cutout demo */
+.cutdemo{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:11px;
+  margin-bottom:17px;
+}
+.cutdemo figure{
+  margin:0;
+  border:1px solid var(--bd);
+  border-radius:11px;
+  overflow:hidden;
+  background:#191410;
+}
+.cutdemo .cimg{
+  aspect-ratio:1/.9;
+  display:grid;
+  place-items:center;
+  position:relative;
+  background:repeating-conic-gradient(from 45deg, rgba(255,255,255,.03) 0% 25%, transparent 0% 50%) 0 0/12px 12px;
+}
+.cutdemo .cimg svg{width:76%;height:76%;overflow:visible}
+/* 抠好的 PNG 用 contain 而不是 cover —— 设备图的整个轮廓都要看得见，
+   裁掉边缘就等于把抠图的成果裁掉了 */
+.cutdemo .cimg img{
+  width:84%;
+  height:84%;
+  object-fit:contain;
+  display:block;
+}
+.cutdemo .cimg.out::after{
+  content:"";
+  position:absolute;
+  inset:11%;
+  border:1.5px dashed var(--am);
+  border-radius:8px;
+  animation:pulse 1.8s ease-in-out infinite;
+}
+@keyframes pulse{0%,100%{opacity:.45}50%{opacity:1}}
+.cutdemo figcaption{
+  font-family:"Space Mono", monospace;
+  font-size:9.5px;
+  letter-spacing:.1em;
+  color:var(--tx3);
+  padding:7px 9px;
+  border-top:1px solid var(--bd);
+  text-align:center;
+}
+
+/* 抠图工作台。棋盘格背景是为了让抠出来的透明区域一眼可见 ——
+   否则在纯色底上"抠成功"和"没抠"看起来一模一样。 */
+.cutstage{
+  position:relative;
+  border:1px solid var(--bd2);
+  border-radius:12px;
+  overflow:hidden;
+  display:grid;
+  place-items:center;
+  min-height:220px;
+  background:
+    repeating-conic-gradient(from 45deg, rgba(255,255,255,.055) 0% 25%, transparent 0% 50%) 0 0/18px 18px,
+    #12100D;
+}
+.cutstage img{
+  display:block;
+  max-width:100%;
+  max-height:52vh;
+  object-fit:contain;
+  cursor:crosshair;
+}
+.cutbusy{
+  position:absolute;
+  inset:0;
+  display:grid;
+  place-items:center;
+  background:rgba(10,8,6,.62);
+  color:var(--am2);
+  font-size:13px;
+  letter-spacing:.08em;
+}
+.cutempty{padding:70px 0;color:var(--tx3);font-size:12.5px}
+
+/* watermark preview */
+.wm{
+  border-radius:4px;
+  overflow:hidden;
+  margin:0 auto 8px;
+  max-width:100%;
+}
+.wm-cream{background:#F3EADA;padding:9px 9px 0;box-shadow:0 10px 26px -12px rgba(0,0,0,.9)}
+.wm-ink{background:#141110;padding:9px 9px 0;border:1px solid var(--bd2)}
+.wm-sprocket{background:#2E2015;padding:0;position:relative}
+.wm-photo{
+  aspect-ratio:3/2;
+  max-width:100%;
+  overflow:hidden;
+  background:#0E0A06;
+  position:relative;
+}
+.wm-photo svg{display:block;width:100%;height:100%}
+.wm-meta{padding:9px 3px 10px}
+.wm-cream .wm-loc{color:#241C14}
+.wm-cream .wm-line{color:#6B5B48}
+.wm-ink .wm-loc{color:#F1E7D7}
+.wm-ink .wm-line{color:#A48F76}
+.wm-loc{font-size:12px;letter-spacing:.02em;line-height:1.3}
+.wm-line{
+  font-family:"Space Mono", monospace;
+  font-size:9.5px;
+  letter-spacing:.06em;
+  margin-top:4px;
+  display:flex;
+  align-items:center;
+  gap:6px;
+  flex-wrap:wrap;
+}
+.wm-line i{width:3px;height:3px;border-radius:50%;background:currentColor;opacity:.55;font-style:normal}
+.wm-sprocket .wm-meta{padding:9px 15px 11px}
+.wm-sprocket .wm-loc{color:#F1E7D7}
+.wm-sprocket .wm-line{color:var(--am)}
+.wm-sprocket::before,.wm-sprocket::after{
+  content:"";
+  position:absolute;
+  top:0;bottom:0;
+  width:15px;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='15' height='22'%3E%3Crect x='2.5' y='5' width='10' height='12' rx='2.4' fill='%23F1E7D7' fill-opacity='0.85'/%3E%3C/svg%3E");
+  background-repeat:repeat-y;
+  background-position:center;
+}
+.wm-sprocket::before{left:0}
+.wm-sprocket::after{right:0}
+.wm-sprocket .wm-photo{margin:9px 15px 0}
+
+.exportmeta{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+  margin-top:14px;
+  padding-top:13px;
+  border-top:1px dashed var(--bd2);
+}
+.exportmeta span{
+  font-family:"Space Mono", monospace;
+  font-size:10px;
+  letter-spacing:.06em;
+  color:var(--tx3);
+  border:1px solid var(--bd);
+  border-radius:4px;
+  padding:4px 8px;
+}
+.poster{
+  background:var(--filmb);
+  border:1px solid #4A3722;
+  border-radius:10px;
+  overflow:hidden;
+}
+.poster-hd{
+  padding:13px 14px 11px;
+  border-bottom:1px solid rgba(241,231,215,.14);
+  display:flex;
+  align-items:flex-start;
+  gap:10px;
+}
+.poster-hd .pt{
+  font-family:"Space Mono", monospace;
+  font-size:12px;
+  letter-spacing:.1em;
+  color:var(--am2);
+}
+.poster-hd .ps{
+  font-family:"Space Mono", monospace;
+  font-size:9px;
+  letter-spacing:.12em;
+  color:rgba(241,231,215,.5);
+  margin-top:5px;
+  line-height:1.6;
+}
+.poster-hd .pn{
+  margin-left:auto;
+  font-family:"Space Mono", monospace;
+  font-size:9px;
+  letter-spacing:.1em;
+  color:rgba(241,231,215,.42);
+  text-align:right;
+  flex:0 0 auto;
+}
+.poster .stripwrap{border:0}
+.poster-ft{
+  padding:10px 14px;
+  border-top:1px solid rgba(241,231,215,.14);
+  font-family:"Space Mono", monospace;
+  font-size:9px;
+  letter-spacing:.1em;
+  color:rgba(241,231,215,.45);
+  display:flex;
+  justify-content:space-between;
+  gap:10px;
+}
+
+.framebig{
+  border-radius:10px;
+  overflow:hidden;
+  background:#0E0A06;
+  aspect-ratio:3/2;
+  max-width:100%;
+  margin-bottom:14px;
+}
+.framebig svg{display:block;width:100%;height:100%}
+.metagrid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:1px;
+  background:var(--bd);
+  border:1px solid var(--bd);
+  border-radius:10px;
+  overflow:hidden;
+  margin-bottom:16px;
+}
+.metagrid>div{background:var(--card);padding:10px 12px;min-width:0}
+.metagrid .k{font-size:9.5px;letter-spacing:.1em;color:var(--tx3);margin-bottom:5px}
+.metagrid .v{font-size:12.5px;color:var(--tx);overflow-wrap:anywhere}
+.metagrid .v.mono{font-family:"Space Mono",monospace;font-size:11.5px}
+
+.toast{
+  position:absolute;
+  left:50%;
+  bottom:104px;
+  transform:translateX(-50%);
+  background:rgba(241,231,215,.96);
+  color:#1A1208;
+  font-size:12.5px;
+  padding:10px 18px;
+  border-radius:100px;
+  z-index:70;
+  box-shadow:0 12px 30px -10px rgba(0,0,0,.8);
+  animation:rise .22s ease both;
+  white-space:nowrap;
+  max-width:86%;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+/* ============================================================
+   SPEC SECTION (page)
+   ============================================================ */
+.spec{
+  border-top:1px solid var(--line);
+  padding-top:44px;
+  display:grid;
+  grid-template-columns:minmax(0,1fr);
+  gap:34px 40px;
+}
+@media (min-width:760px){ .spec{grid-template-columns:repeat(2,minmax(0,1fr))} }
+.spec h2{
+  font-family:"Noto Serif SC", serif;
+  font-weight:900;
+  font-size:22px;
+  margin:0 0 16px;
+  letter-spacing:.02em;
+}
+.spec h3{
+  font-family:"Space Mono", monospace;
+  font-size:11px;
+  letter-spacing:.18em;
+  text-transform:uppercase;
+  color:var(--amber);
+  margin:0 0 14px;
+  display:flex;
+  align-items:center;
+  gap:10px;
+}
+.spec h3::after{content:"";flex:1;height:1px;background:var(--line)}
+.spec ol,.spec ul{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:12px}
+.spec li{
+  font-size:13.5px;
+  line-height:1.7;
+  color:var(--ink-2);
+  display:grid;
+  grid-template-columns:26px minmax(0,1fr);
+  gap:12px;
+  align-items:baseline;
+}
+.spec li .n{
+  font-family:"Space Mono", monospace;
+  font-size:11px;
+  color:var(--amber);
+  letter-spacing:.06em;
+}
+.spec li b{color:var(--ink);font-weight:500}
+.spec ul li{grid-template-columns:minmax(0,1fr)}
+.spec .kv{
+  display:grid;
+  grid-template-columns:96px minmax(0,1fr);
+  gap:14px;
+  padding-block:10px;
+  border-bottom:1px solid var(--line);
+  font-size:13px;
+  align-items:baseline;
+}
+.spec .kv:first-of-type{border-top:1px solid var(--line)}
+.spec .kv dt{font-family:"Space Mono", monospace;font-size:11px;letter-spacing:.1em;color:var(--ink-3)}
+.spec .kv dd{margin:0;color:var(--ink-2);line-height:1.6}
+.swatches{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}
+.sw{display:flex;flex-direction:column;gap:7px;font-family:"Space Mono",monospace;font-size:9.5px;color:var(--ink-3);letter-spacing:.06em}
+.sw i{display:block;width:52px;height:52px;border-radius:6px;border:1px solid var(--line-2)}
+
+footer.pagefoot{
+  border-top:1px solid var(--line);
+  padding-top:22px;
+  font-family:"Space Mono", monospace;
+  font-size:10.5px;
+  letter-spacing:.12em;
+  color:var(--ink-3);
+  text-transform:uppercase;
+  display:flex;
+  justify-content:space-between;
+  gap:16px;
+  flex-wrap:wrap;
+}
+
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{animation-duration:.01ms !important;animation-iteration-count:1 !important;transition-duration:.01ms !important}
+}
+
+/* ============================================================
+   主题：暗房 / 米色
+   ============================================================
+   必须覆盖在 .phone 上，不能写在 :root —— .phone 自己定义了这些变量，
+   而元素上的值永远赢过从 html 继承的值，跟优先级无关。
+
+   --filmb（底片基色）两套主题完全一样：那是底片本身的颜色，不是界面皮肤。
+   米色主题下深色底片反而更对 —— 像接触印相纸上摆着的实物胶片。
+   ============================================================ */
+html[data-theme="darkroom"] .phone{
+  --bg:#15110D;  --bg2:#1D1712;  --card:#231B14;  --card2:#2C2219;
+  --bd:#3A2D21;  --bd2:#4A3A2B;
+  --tx:#F1E7D7;  --tx2:#A48F76;  --tx3:#6E5D4A;
+  --am:#E5A03A;  --am2:#F5C173;
+  --rust:#D2553A; --sage:#8AA06E;
+  --filmb:#2E2015; --filmb2:#3E2C1A;
+}
+html[data-theme="paper"] .phone{
+  --bg:#EFE6D6;  --bg2:#E7DCC8;  --card:#F7F1E4;  --card2:#EFE7D6;
+  --bd:#D8C9AE;  --bd2:#C6B393;
+  --tx:#241C14;  --tx2:#5C4E3C;  --tx3:#8A7860;
+  --am:#A96C12;  --am2:#8A5708;
+  --rust:#9E3418; --sage:#55663F;
+  --filmb:#2E2015; --filmb2:#3E2C1A;
+}
+/* 让原生控件（date picker、滚动条）跟着换 */
+html[data-theme="darkroom"]{ color-scheme: dark; }
+html[data-theme="paper"]{ color-scheme: light; }
+
+/* 导航栏底色是硬编码的，得单独覆盖 */
+html[data-theme="paper"] .nav,
+html[data-theme="paper"] .homebar{ background:rgba(247,241,228,.94); }
+html[data-theme="paper"] .homebar i{ background:#C6B393; }
+
+/* 颗粒：米色主题下要更轻，并且换成 multiply。
+   overlay 在浅底上会把纸面压灰，看起来像脏了。 */
+html[data-theme="paper"] .phone::after{ opacity:.16; mix-blend-mode:multiply; }
+
+/* deviceSVG 把描边色写死成米白 #F1E7D7，在米色背景上完全看不见 ——
+   相机仓库的机身镜头会集体消失。var() 在 SVG 表现属性里不生效，
+   但表现属性的优先级低于任何 CSS 规则，所以用属性选择器覆盖。 */
+html[data-theme="paper"] .gearshot svg [stroke="#F1E7D7"],
+html[data-theme="paper"] .cutdemo svg [stroke="#F1E7D7"]{ stroke:var(--tx); }
+html[data-theme="paper"] .gearshot svg [stroke="#A48F76"],
+html[data-theme="paper"] .cutdemo svg [stroke="#A48F76"]{ stroke:var(--tx2); }
+html[data-theme="paper"] .gearshot svg [stroke="#E5A03A"],
+html[data-theme="paper"] .cutdemo svg [stroke="#E5A03A"]{ stroke:var(--am); }
+html[data-theme="paper"] .gearshot svg [fill="#E5A03A"],
+html[data-theme="paper"] .cutdemo svg [fill="#E5A03A"]{ fill:var(--am); }
+
+/* 刻意不覆盖 sceneSVG 的天空/山峦渐变 —— 那是照片内容，不是界面皮肤。
+   海岸场景在两套主题下都该是海岸。 */
+
+</style>
+
+<div class="page">
+
+  <div class="hero">
+    <header class="masthead">
+      <p class="eyebrow">Mobile App · Design Prototype</p>
+      <h1>菲林档案</h1>
+      <p class="lede">给胶片摄影爱好者的<strong>本地归档工具</strong>。把冲洗回来的底片拼成长条，像在观片台上一样一段段看过去，顺手记下它是在哪儿拍的。没有社交，不做滤镜调色 —— 只负责记住。</p>
+      <div class="tagrow">
+        <span class="tag">长条底片</span>
+        <span class="tag">分段标记地点</span>
+        <span class="tag">拍摄日历</span>
+        <span class="tag">相机仓库</span>
+        <span class="tag">胶卷库存</span>
+        <span class="tag">水印边框导出</span>
+      </div>
+      <dl class="factlist">
+        <div class="fact"><dt>定位</dt><dd>纯个人档案管理，<b>无社交功能</b></dd></div>
+        <div class="fact"><dt>边界</dt><dd>归档与记录，<b>不含调色滤镜</b></dd></div>
+        <div class="fact"><dt>录入</dt><dd>相机型号与胶卷型号<b>自由手输</b>，不受预设限制</dd></div>
+        <div class="fact"><dt>质感</dt><dd>暗房底色、片边橙字、<b>齿孔与颗粒</b></dd></div>
+      </dl>
+    </header>
+
+    <div class="stage">
+      <div class="phone" id="phone">
+        <div class="statusbar">
+          <span>9:41</span>
+          <span class="sb-r">
+            <svg width="17" height="11" viewBox="0 0 17 11" fill="currentColor" aria-hidden="true"><rect x="0" y="7" width="3" height="4" rx="1"/><rect x="4.5" y="5" width="3" height="6" rx="1"/><rect x="9" y="2.5" width="3" height="8.5" rx="1"/><rect x="13.5" y="0" width="3" height="11" rx="1"/></svg>
+            <svg width="16" height="11" viewBox="0 0 16 11" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M1 3.6a10 10 0 0 1 14 0"/><path d="M3.6 6.2a6.4 6.4 0 0 1 8.8 0"/><circle cx="8" cy="9.4" r=".9" fill="currentColor" stroke="none"/></svg>
+            <svg width="25" height="12" viewBox="0 0 25 12" fill="none" aria-hidden="true"><rect x=".5" y=".5" width="20" height="11" rx="3" stroke="currentColor" opacity=".45"/><rect x="2" y="2" width="14" height="8" rx="1.6" fill="currentColor"/><path d="M22.5 4v4a2.2 2.2 0 0 0 0-4Z" fill="currentColor" opacity=".45"/></svg>
+          </span>
+        </div>
+        <div class="screen" id="screen"></div>
+        <button class="fab" id="fab" aria-label="新增" hidden></button>
+        <nav class="nav" id="nav"></nav>
+        <div class="homebar"><i></i></div>
+        <div class="sheetwrap" id="sheetwrap" hidden>
+          <button class="scrim" data-act="closeSheet" aria-label="关闭"></button>
+          <div class="sheet" id="sheet" role="dialog" aria-modal="true"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <section class="spec">
+    <div>
+      <h3>01 / 数据存储字段</h3>
+      <dl class="kv" style="margin:0">
+        <dt>导入来源</dt><dd>扫描仪 / 相机翻拍，并可另填具体型号（扫描仪型号，或翻拍用的机身 + 镜头）</dd>
+        <dt>冲洗店</dt><dd>自由文本，可复用历史店铺</dd>
+        <dt>胶卷类型</dt><dd>自由手输，预设仅作快捷建议</dd>
+        <dt>相机型号</dt><dd>自由手输，与相机仓库联动但不强制</dd>
+        <dt>冲洗日期</dt><dd>与拍摄日期分开记录，日历按拍摄日期索引</dd>
+        <dt>胶卷规格</dt><dd>135 / 120，决定底片画面比例（3:2 或 6×6）</dd>
+      </dl>
+      <div class="swatches">
+        <span class="sw"><i style="background:#15110D"></i>暗房底</span>
+        <span class="sw"><i style="background:#2E2015"></i>片基</span>
+        <span class="sw"><i style="background:#E5A03A"></i>片边橙</span>
+        <span class="sw"><i style="background:#D2553A"></i>过期红</span>
+        <span class="sw"><i style="background:#F1E7D7"></i>米白</span>
+      </div>
+    </div>
+
+    <div>
+      <h3>02 / 底片核心交互</h3>
+      <ol>
+        <li><span class="n">01</span><span>多张照片<b>拼接为一整张长条底片</b>，横向滑动浏览，齿孔与片边代号还原实体观感。</span></li>
+        <li><span class="n">02</span><span>长条可<b>切分为多个片段</b>，片段与画面一一对齐，切点以虚线剪刀标记。</span></li>
+        <li><span class="n">03</span><span>每个片段<b>独立标记拍摄地点</b>，自由文本；片段条横跨其覆盖的画面。</span></li>
+        <li><span class="n">04</span><span>视图左上角常驻<b>胶卷种类小字</b>，每格画面下方标注<b>底片编号</b>。</span></li>
+      </ol>
+    </div>
+
+    <div>
+      <h3>03 / 底部导航结构</h3>
+      <ul>
+        <li><b>底片</b> —— 按时间 / 按胶卷双模式，支持自定义文件夹归档多卷</li>
+        <li><b>摄影日历</b> —— 月历索引跳转胶卷档案，全年柱状统计每月卷数</li>
+        <li><b>相机仓库</b> —— 机身与镜头登记，拍照自动抠图或上传图片</li>
+        <li><b>胶卷仓库</b> —— 库存计数，按过期时间由近到远排序</li>
+      </ul>
+    </div>
+
+    <div>
+      <h3>04 / 导出能力</h3>
+      <ul>
+        <li><b>胶卷总览大图</b> —— 整卷长条底片 + 片头信息 + 分段标注，一次导出</li>
+        <li><b>水印边框</b> —— 单张照片套胶片风格边框，含拍摄地点 / 拍摄时间 / 相机型号，三种边框样式</li>
+        <li>导出走系统相册，不经过任何服务器</li>
+      </ul>
+    </div>
+  </section>
+
+  <footer class="pagefoot">
+    <span>菲林档案 · Film Archive</span>
+    <span>原型可交互 — 点击底部 Tab、拖动底片、点击片段</span>
+  </footer>
+</div>
+
+<script>
+/* ============================================================
+   Native 适配层
+   ============================================================
+   在安卓里 window.AndroidBridge 由 MainActivity 注入；在浏览器里走本地实现。
+   两边行为尽量一致 —— 原型直接用 Chrome 打开时是**完整可用**的（有持久化、
+   能导入照片、能导出），而不是一堆空桩。这样原型和 App 共用一条代码路径，
+   不会出现"只有在手机上才复现"的 bug。
+   ============================================================ */
+var Native = (function(){
+  var raw = (typeof window.AndroidBridge !== 'undefined') ? window.AndroidBridge : null;
+  var isNative = !!raw;
+  var LS_DOC = 'filmbox.doc', LS_THEME = 'filmbox.theme';
+
+  function lsGet(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
+  function lsSet(k, v){ try { localStorage.setItem(k, v); } catch(e){} }
+
+  /* 浏览器模式下的照片存放：pid -> blob URL。
+     blob URL 是同源的，所以画进 canvas 不会被污染 —— 导出功能在浏览器里也能跑。 */
+  var browserPhotos = {};
+  /* 浏览器模式下抠图产物的 blob URL（原生是 gear/ 下的 PNG 文件） */
+  var browserGear = {};
+
+  function bKey(rollId, pid, kind){ return rollId + '/' + pid + '/' + (kind || 'thumbs'); }
+
+  function bFinish(rollId, out, failures, cancelled){
+    window.__bridge.onImportDone(JSON.stringify({
+      rollId: rollId, photos: out, failures: failures || [], cancelled: !!cancelled,
+      totalBytes: out.reduce(function(a, x){ return a + (x.bytes || 0); }, 0)
+    }));
+  }
+
+  /* 浏览器导入：隐藏的 <input type=file>，走 objectURL。
+     和原生走同一套回调，所以上层的导入 UI 一行都不用分叉。 */
+  function browserImport(req){
+    var inp = document.createElement('input');
+    inp.type = 'file';
+    inp.accept = 'image/*';
+    inp.multiple = true;
+    inp.style.display = 'none';
+    document.body.appendChild(inp);
+
+    inp.addEventListener('change', function(){
+      var files = Array.prototype.slice.call(inp.files || []);
+      if (inp.parentNode) inp.parentNode.removeChild(inp);
+      if (!files.length) { bFinish(req.rollId, [], [], true); return; }
+
+      var out = [], failures = [], done = 0, total = files.length;
+      var base = 'p_' + req.rollId + '_' + Date.now().toString(36);
+
+      function step(){
+        done++;
+        if (done === total) bFinish(req.rollId, out, failures, false);
+      }
+
+      files.forEach(function(f, i){
+        var pid = base + '_' + (i + 1);
+        var url = URL.createObjectURL(f);
+        browserPhotos[bKey(req.rollId, pid, 'thumbs')] = url;
+        browserPhotos[bKey(req.rollId, pid, 'photos')] = url;
+
+        var img = new Image();
+        img.onload = function(){
+          var p = {
+            id: pid, name: f.name,
+            w: img.naturalWidth, h: img.naturalHeight,
+            thumbW: img.naturalWidth, thumbH: img.naturalHeight,
+            bytes: f.size, original: !!req.keepOriginal, origBytes: 0
+          };
+          out.push(p);
+          window.__bridge.onImportProgress(JSON.stringify({
+            rollId: req.rollId, done: done + 1, total: total, photo: p
+          }));
+          step();
+        };
+        img.onerror = function(){
+          failures.push(f.name + '：不是可解码的图片');
+          window.__bridge.onImportProgress(JSON.stringify({
+            rollId: req.rollId, done: done + 1, total: total,
+            failedName: f.name, error: '不是可解码的图片'
+          }));
+          step();
+        };
+        img.src = url;
+      });
+    });
+
+    inp.click();
+  }
+
+  return {
+    mode: isNative ? 'native' : 'browser',
+    raw: raw,
+
+    appInfo: function(){
+      if (isNative && raw.appInfo) {
+        try { return JSON.parse(raw.appInfo()); } catch(e){}
+      }
+      return { mode:'browser', versionName:'prototype', sdk:0, freeBytes:0 };
+    },
+
+    docLoad: function(){
+      if (isNative && raw.docLoad) {
+        try { return JSON.parse(raw.docLoad()); } catch(e){ return null; }
+      }
+      var s = lsGet(LS_DOC);
+      if (!s) return null;
+      try { return JSON.parse(s); } catch(e){ return null; }
+    },
+
+    docSave: function(doc){
+      var s = JSON.stringify(doc);
+      lsSet(LS_DOC, s);                       // 崩溃恢复镜像，两种模式都写
+      if (isNative && raw.docSave) raw.docSave(s);
+    },
+
+    setTheme: function(t){
+      lsSet(LS_THEME, t);
+      if (isNative && raw.setTheme) raw.setTheme(t);
+    },
+
+    savedTheme: function(){ return lsGet(LS_THEME); },
+
+    log: function(level, msg){
+      var s = String(msg == null ? '' : msg);
+      if (isNative && raw.log) { raw.log(level, s); return; }
+      if (level === 'error') console.error('[filmbox] ' + s);
+      else if (level === 'warn') console.warn('[filmbox] ' + s);
+      else console.log('[filmbox] ' + s);
+    },
+
+    /* 照片 URL。原生走 WebViewAssetLoader 挂的路径（普通 <img> 原生加载、
+       走 WebView 自己的缓存），浏览器走 blob URL。上层只认这一个函数。 */
+    photoUrl: function(rollId, pid, kind){
+      if (isNative) {
+        return '/' + (kind === 'photos' ? 'photos' : 'thumbs') + '/' +
+               encodeURIComponent(rollId) + '/' + encodeURIComponent(pid) + '.jpg';
+      }
+      return browserPhotos[bKey(rollId, pid, kind)] || '';
+    },
+
+    importPhotos: function(req){
+      if (isNative && raw.importPhotos) { raw.importPhotos(JSON.stringify(req)); return; }
+      browserImport(req);
+    },
+
+    cancelImport: function(){
+      if (isNative && raw.cancelImport) raw.cancelImport();
+    },
+
+    deletePhotos: function(rollId, ids){
+      if (isNative && raw.deletePhotos) {
+        raw.deletePhotos(JSON.stringify({ rollId: rollId, ids: ids }));
+        return;
+      }
+      for (var i = 0; i < ids.length; i++) {
+        ['thumbs', 'photos'].forEach(function(k){
+          var key = bKey(rollId, ids[i], k);
+          if (browserPhotos[key]) { URL.revokeObjectURL(browserPhotos[key]); delete browserPhotos[key]; }
+        });
+      }
+      window.__bridge.onPhotosDeleted(JSON.stringify({ deleted: ids.length }));
+    },
+
+    /* 落盘到系统相册。浏览器里退化成下载 —— 同样是"存下来"这个动作的
+       诚实实现，不是空桩。 */
+    saveToAlbum: function(dataUrl, name){
+      if (isNative && raw.saveToAlbum) {
+        raw.saveToAlbum(JSON.stringify({ dataUrl: dataUrl, name: name }));
+        return;
+      }
+      try {
+        var a = document.createElement('a');
+        a.href = dataUrl;
+        a.download = name + '.jpg';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.__bridge.onExportDone(JSON.stringify({ name: name, browser: true }));
+      } catch(e) {
+        window.__bridge.onExportError(JSON.stringify({ message: String(e && e.message) }));
+      }
+    },
+
+    /* 拍照。浏览器里用 <input type=file capture>，桌面浏览器会退化成选文件。 */
+    capturePhoto: function(purpose){
+      if (isNative && raw.capturePhoto) {
+        raw.capturePhoto(JSON.stringify({ purpose: purpose }));
+        return;
+      }
+      var inp = document.createElement('input');
+      inp.type = 'file';
+      inp.accept = 'image/*';
+      inp.setAttribute('capture', 'environment');
+      inp.style.display = 'none';
+      document.body.appendChild(inp);
+      inp.addEventListener('change', function(){
+        var f = (inp.files || [])[0];
+        if (inp.parentNode) inp.parentNode.removeChild(inp);
+        if (!f) { window.__bridge.onCaptureDone(JSON.stringify({ purpose: purpose, cancelled: true })); return; }
+        var url = URL.createObjectURL(f);
+        window.__captureBrowserUrl = url;
+        window.__bridge.onCaptureDone(JSON.stringify({
+          purpose: purpose, browserUrl: url, bytes: f.size
+        }));
+      });
+      inp.click();
+    },
+
+    /* 拍照结果的预览 URL。原生是 tmp/ 下的真实文件，浏览器是 blob。 */
+    captureUrl: function(o){
+      if (isNative) {
+        var base = String(o.path || '').split(/[\\/]/).pop();
+        return base ? '/tmp/' + encodeURIComponent(base) : '';
+      }
+      return o.browserUrl || '';
+    },
+
+    /* 抠图产物（PNG，带 alpha）的 URL。 */
+    gearUrl: function(name){
+      if (!name) return '';
+      if (isNative) return '/gear/' + encodeURIComponent(name);
+      return browserGear[name] || '';
+    },
+
+    /* MediaPipe 抠图。浏览器没有 ML —— 不装作有，直接告诉上层不可用，
+       让界面退回设备线稿。这比返回一张"抠失败"的图诚实。 */
+    cutoutBegin: function(req){
+      if (isNative && raw.cutoutBegin) { raw.cutoutBegin(JSON.stringify(req)); return; }
+      window.__bridge.onCutoutUnavailable(JSON.stringify({
+        reason: '浏览器模式没有 ML 抠图，已改用设备线稿'
+      }));
+    },
+    cutoutPoint: function(x, y){
+      if (isNative && raw.cutoutPoint) raw.cutoutPoint(JSON.stringify({ x: x, y: y }));
+    },
+    cutoutEnd: function(){
+      if (isNative && raw.cutoutEnd) raw.cutoutEnd();
+    },
+
+    /* 从相册选一张（不是拍照）。浏览器里复用文件选择。 */
+    pickPhoto: function(purpose){
+      if (isNative && raw.pickPhoto) { raw.pickPhoto(JSON.stringify({ purpose: purpose })); return; }
+      this.capturePhoto(purpose);
+    }
+  };
+})();
+
+/* 原生回调的落点。两种模式下都存在，页面代码可以无条件调用。 */
+window.__bridge = window.__bridge || {
+  onDoc:function(){}, onImportProgress:function(){}, onImportDone:function(){},
+  onImportError:function(){}, onCutoutReady:function(){}, onCutoutResult:function(){},
+  onCutoutError:function(){}, onCutoutUnavailable:function(){},
+  onExportDone:function(){}, onExportError:function(){}, onPhotosDeleted:function(){},
+  onCaptureDone:function(){}, onCaptureError:function(){}
+};
+</script>
+
+<script>
+(function(){
+"use strict";
+
+/* ============================================================
+   utilities
+   ============================================================ */
+var _u = 0;
+function uid(){ return 'g' + (++_u); }
+function mulberry(a){
+  return function(){
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    var t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+function esc(s){
+  return String(s).replace(/[&<>"]/g, function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];
+  });
+}
+function hash(str){
+  var h = 2166136261;
+  for(var i=0;i<str.length;i++){ h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return (h >>> 0) % 100000;
+}
+
+/* grain tile for the whole device */
+(function makeGrain(){
+  try{
+    var c = document.createElement('canvas');
+    c.width = c.height = 140;
+    var ctx = c.getContext('2d');
+    if(!ctx) return;
+    var img = ctx.createImageData(140,140);
+    var d = img.data;
+    for(var i=0;i<d.length;i+=4){
+      var v = 90 + Math.random()*76;
+      d[i] = d[i+1] = d[i+2] = v;
+      d[i+3] = 40 + Math.random()*54;
+    }
+    ctx.putImageData(img,0,0);
+    document.getElementById('phone').style.setProperty('--grain', 'url(' + c.toDataURL() + ')');
+  }catch(e){ /* grain is decorative */ }
+})();
+
+/* ============================================================
+   procedural photo scenes
+   ============================================================ */
+var SCENES = {
+  coast:  {sky:['#8FB6D2','#F4E2C0'], sun:'#FCE7B6', sunAt:[.74,.38], water:.64,
+           layers:[['#5E7E88',.58,.020],['#3E5A64',.64,.028],['#22343C',.72,.020]]},
+  lake:   {sky:['#C3D6DA','#E9E2CD'], sun:'#F7EACA', sunAt:[.28,.26], water:.60,
+           layers:[['#6E8478',.48,.038],['#4A6055',.56,.048],['#2C3E36',.66,.038]]},
+  street: {sky:['#BCC5CB','#EBE2CB'], sun:'#F2D89C', sunAt:[.16,.28], city:true,
+           layers:[['#7E7A72',.60,.010],['#5A564E',.68,.008]]},
+  alpine: {sky:['#7FA0C0','#E6E8E4'], sun:'#FFF3D0', sunAt:[.64,.22],
+           layers:[['#A8B4BE',.48,.058],['#6E7C8A',.60,.066],['#3A4552',.74,.048]]},
+  field:  {sky:['#9FB8CE','#F2E4C2'], sun:'#FFEBB8', sunAt:[.78,.32],
+           layers:[['#C4B078',.56,.018],['#9A874E',.64,.028],['#6A5C34',.74,.018]]},
+  night:  {sky:['#1E2A44','#4E3C5C'], sun:'#F2C878', sunAt:[.22,.24], city:true, lights:true,
+           layers:[['#1A1E30',.68,.012],['#0E1220',.80,.010]]},
+  forest: {sky:['#C6D3C0','#96AB89'], sun:'#F4EAC4', sunAt:[.32,.20],
+           layers:[['#6E8058',.44,.044],['#485C3A',.56,.054],['#26341E',.70,.044]]}
+};
+
+function wave(r, W, H, y, amp, steps){
+  var d = 'M0 ' + H + ' L0 ' + (y*H).toFixed(1);
+  for(var i=1;i<=steps;i++){
+    var x  = W*i/steps;
+    var yy = (y + (r()-.5)*2*amp)*H;
+    var cx = W*(i-.5)/steps;
+    var cy = (y + (r()-.5)*2*amp)*H;
+    d += ' Q' + cx.toFixed(1) + ' ' + cy.toFixed(1) + ' ' + x.toFixed(1) + ' ' + yy.toFixed(1);
+  }
+  return d + ' L' + W + ' ' + H + ' Z';
+}
+
+var _sceneCache = {};
+function sceneSVG(kind, seed){
+  var key = kind + ':' + seed;
+  if(_sceneCache[key]) return _sceneCache[key];
+  var P = SCENES[kind] || SCENES.coast;
+  var W = 300, H = 200;
+  var r = mulberry(seed*7919 + 13);
+  var g = uid();
+  var s = '<svg viewBox="0 0 300 200" preserveAspectRatio="none" aria-hidden="true">';
+  s += '<defs><linearGradient id="' + g + '" x1="0" y1="0" x2="0" y2="1">';
+  s += '<stop offset="0" stop-color="' + P.sky[0] + '"/>';
+  s += '<stop offset="1" stop-color="' + P.sky[1] + '"/></linearGradient></defs>';
+  s += '<rect width="300" height="200" fill="url(#' + g + ')"/>';
+
+  var sx = P.sunAt[0]*W, sy = P.sunAt[1]*H;
+  s += '<circle cx="' + sx.toFixed(1) + '" cy="' + sy.toFixed(1) + '" r="34" fill="' + P.sun + '" opacity=".18"/>';
+  s += '<circle cx="' + sx.toFixed(1) + '" cy="' + sy.toFixed(1) + '" r="17" fill="' + P.sun + '" opacity=".8"/>';
+
+  if(P.city){
+    var col = P.layers[0][0], x = -12, wins = 0;
+    while(x < W + 12){
+      var bw = 15 + r()*26;
+      var bh = H*(.16 + r()*.24);
+      var top = H*.74 - bh;
+      s += '<rect x="' + x.toFixed(1) + '" y="' + top.toFixed(1) + '" width="' + bw.toFixed(1) +
+           '" height="' + (bh + H*.3).toFixed(1) + '" fill="' + col + '"/>';
+      if(P.lights && wins < 46){
+        for(var i=0;i<Math.floor(bw/8);i++){
+          for(var j=0;j<Math.floor(bh/11);j++){
+            if(wins >= 46) break;
+            if(r() > .58){
+              s += '<rect x="' + (x + 3.5 + i*8).toFixed(1) + '" y="' + (top + 5 + j*11).toFixed(1) +
+                   '" width="2.6" height="3.4" fill="#F6D48A" opacity="' + (.45 + r()*.5).toFixed(2) + '"/>';
+              wins++;
+            }
+          }
+        }
+      }
+      x += bw + 2 + r()*5;
+    }
+  }
+
+  var start = P.city ? 1 : 0;
+  for(var k=start;k<P.layers.length;k++){
+    var L = P.layers[k];
+    s += '<path d="' + wave(r, W, H, L[1], L[2], 6) + '" fill="' + L[0] + '"/>';
+  }
+
+  if(P.water){
+    var wy = P.water*H;
+    var wg = uid();
+    s += '<defs><linearGradient id="' + wg + '" x1="0" y1="0" x2="0" y2="1">';
+    s += '<stop offset="0" stop-color="' + P.sky[1] + '" stop-opacity=".82"/>';
+    s += '<stop offset="1" stop-color="' + P.layers[P.layers.length-1][0] + '" stop-opacity=".92"/></linearGradient></defs>';
+    s += '<rect x="0" y="' + wy.toFixed(1) + '" width="300" height="' + (H-wy).toFixed(1) + '" fill="url(#' + wg + ')"/>';
+    for(var q=0;q<7;q++){
+      var ly = wy + 5 + q*((H-wy)/8) + r()*4;
+      var lw = 20 + r()*70;
+      var lx = sx - lw/2 + (r()-.5)*46;
+      s += '<rect x="' + Math.max(0,lx).toFixed(1) + '" y="' + ly.toFixed(1) + '" width="' + lw.toFixed(1) +
+           '" height="1.6" fill="' + P.sun + '" opacity="' + (.16 + r()*.3).toFixed(2) + '"/>';
+    }
+  }
+
+  s += '</svg>';
+  _sceneCache[key] = s;
+  return s;
+}
+
+/* ============================================================
+   icons
+   ============================================================ */
+var I = {
+  film:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M7.2 4v16M16.8 4v16M3 9.2h4.2M3 14.8h4.2M16.8 9.2H21M16.8 14.8H21"/></svg>',
+  cal:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2.5"/><path d="M3 10h18M8 3v4M16 3v4"/><circle cx="8.5" cy="14.5" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="14.5" r="1" fill="currentColor" stroke="none"/><circle cx="15.5" cy="14.5" r="1" fill="currentColor" stroke="none"/></svg>',
+  cam:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7.2h2.6l1.4-2.2h8l1.4 2.2H20a1 1 0 0 1 1 1v9.6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8.2a1 1 0 0 1 1-1Z"/><circle cx="12" cy="13" r="3.6"/></svg>',
+  roll:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7.5" y="2.5" width="9" height="3.6" rx="1.2"/><path d="M6.2 6.1h11.6v14.2a1.2 1.2 0 0 1-1.2 1.2H7.4a1.2 1.2 0 0 1-1.2-1.2Z"/><path d="M14 6.1v15.4"/><path d="M8.6 10.5h2.8M8.6 13.4h2.8"/></svg>',
+  folder:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7.2a2 2 0 0 1 2-2h3.9l2 2H19a2 2 0 0 1 2 2v8.6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>',
+  pin:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21.5s7-6.4 7-11.3A7 7 0 1 0 5 10.2c0 4.9 7 11.3 7 11.3Z"/><circle cx="12" cy="10" r="2.4"/></svg>',
+  left:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5 8 12l6.5 7"/></svg>',
+  right:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 5 16 12l-6.5 7"/></svg>',
+  plus:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5.5v13M5.5 12h13"/></svg>',
+  dl:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5v11.5M7.5 11 12 15.5 16.5 11M4.5 20h15"/></svg>',
+  cut:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="18" r="2.4"/><circle cx="6" cy="6" r="2.4"/><path d="M8.1 7.4 19.5 19M8.1 16.6 19.5 5"/></svg>',
+  x:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M6.5 6.5 17.5 17.5M17.5 6.5 6.5 17.5"/></svg>',
+  more:'<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5.5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="18.5" cy="12" r="1.7"/></svg>',
+  scan:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8.5V5.5a1.5 1.5 0 0 1 1.5-1.5h3M15.5 4h3A1.5 1.5 0 0 1 20 5.5v3M20 15.5v3a1.5 1.5 0 0 1-1.5 1.5h-3M8.5 20h-3A1.5 1.5 0 0 1 4 18.5v-3"/><path d="M3 12h18"/></svg>',
+  camcopy:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3.5" width="18" height="11.5" rx="2.4"/><circle cx="12" cy="9.2" r="2.9"/><path d="M12 17.4v3.4M9.9 18.6 12 20.8l2.1-2.2"/></svg>',
+  spark:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.2 13.7 8 18.5 9.7 13.7 11.4 12 16.2 10.3 11.4 5.5 9.7 10.3 8Z"/><path d="M18.5 16v3.5M16.8 17.7h3.5"/></svg>',
+  pen:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4l10-10a2.1 2.1 0 0 0-3-3L5 17Z"/><path d="M14.5 6.5 17.5 9.5"/></svg>',
+  up:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M7 10l5-5 5 5"/></svg>',
+  sortup:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h11M4 12h8M4 17h5M17 17V8M17 8l-2.5 2.5M17 8l2.5 2.5"/></svg>',
+  check:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5 10 17.5 19 7"/></svg>',
+  cog:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3.1"/><path d="M12 2.6v2.2M12 19.2v2.2M21.4 12h-2.2M4.8 12H2.6M18.6 5.4l-1.6 1.6M7 17l-1.6 1.6M18.6 18.6 17 17M7 7 5.4 5.4"/></svg>',
+  info:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.8v.2"/></svg>'
+};
+
+/* ============================================================
+   data
+   ============================================================ */
+function S(loc, from, to){ return {loc:loc, from:from, to:to}; }
+
+var ROLLS = [
+  { id:'r8', film:'KODAK PORTRA 400', stock:'Portra 400', spec:'135', iso:400, scene:'lake',
+    camera:'Nikon FM2', lens:'Nikkor 50mm f/1.4', dev:'苏州 · 平江冲扫', devDate:'2026-09-16',
+    source:'scanner', sourceModel:'Plustek OpticFilm 8200i',
+    primary:'2026-09-12', shots:['2026-09-12'], start:25, count:12,
+    folder:'2026 秋 · 江浙沪', segs:[S('苏州 · 平江路',0,11)] },
+  { id:'r9', film:'ILFORD HP5 PLUS', stock:'HP5 Plus', spec:'135', iso:400, scene:'street',
+    camera:'Leica M6 Classic', lens:'Summicron 35mm f/2', dev:'北京 · 白塔暗房', devDate:'2026-09-25',
+    source:'scanner', sourceModel:'Nikon Coolscan 5000 ED',
+    primary:'2026-09-21', shots:['2026-09-21'], start:1, count:12,
+    folder:'2026 秋 · 江浙沪', segs:[S('北京 · 鼓楼',0,5), S('北京 · 景山',6,11)] },
+  { id:'r7', film:'ILFORD DELTA 3200', stock:'Delta 3200', spec:'135', iso:3200, scene:'night',
+    camera:'Leica M6 Classic', lens:'Summicron 35mm f/2', dev:'上海 · 老陈冲扫', devDate:'2026-09-08',
+    source:'camera', sourceModel:'Sony A7R IV + 50mm 微距',
+    primary:'2026-09-03', shots:['2026-09-03'], start:13, count:12,
+    folder:'2026 秋 · 江浙沪', segs:[S('上海 · 外滩',0,5), S('上海 · 武康路',6,11)] },
+  { id:'r6', film:'KODAK GOLD 200', stock:'Gold 200', spec:'135', iso:200, scene:'street',
+    camera:'佳能 AE-1', lens:'FD 50mm f/1.8', dev:'重庆 · 山城冲印', devDate:'2026-08-07',
+    source:'camera', sourceModel:'Fujifilm X-T5 + 60mm 微距',
+    primary:'2026-08-01', shots:['2026-08-01','2026-08-02'], start:1, count:12,
+    folder:null, segs:[S('重庆 · 洪崖洞',0,6), S('重庆 · 南山一棵树',7,11)] },
+  { id:'r4', film:'KODAK EKTAR 100', stock:'Ektar 100', spec:'135', iso:100, scene:'alpine',
+    camera:'Nikon FM2', lens:'Nikkor 105mm f/2.5', dev:'成都 · 天府冲扫', devDate:'2026-07-14',
+    source:'scanner', sourceModel:'Epson V850 Pro',
+    primary:'2026-07-08', shots:['2026-07-08','2026-07-09'], start:1, count:12,
+    folder:'川西行', segs:[S('川西 · 折多山',0,4), S('川西 · 新都桥',5,11)] },
+  { id:'r2', film:'FUJI PRO 400H', stock:'Pro 400H', spec:'120', iso:400, scene:'forest',
+    camera:'Mamiya RB67 Pro SD', lens:'Sekor 90mm f/3.8', dev:'上海 · 老陈冲扫', devDate:'2026-06-09',
+    source:'camera', sourceModel:'Sony A7R IV + 50mm 微距',
+    primary:'2026-06-03', shots:['2026-06-03'], start:1, count:12,
+    folder:'江南水乡', segs:[S('杭州 · 西湖',0,5), S('杭州 · 龙井村',6,11)] },
+  { id:'r1', film:'KODAK PORTRA 400', stock:'Portra 400', spec:'135', iso:400, scene:'coast',
+    camera:'Nikon FM2', lens:'Nikkor 50mm f/1.4', dev:'北京 · 光影冲印', devDate:'2026-05-12',
+    source:'scanner', sourceModel:'Nikon Coolscan 5000 ED',
+    primary:'2026-05-02', shots:['2026-05-02','2026-05-04','2026-05-06'], start:1, count:12,
+    folder:'2026 春 · 青岛', segs:[S('青岛 · 栈桥',0,3), S('青岛 · 八大关',4,8), S('崂山 · 太清宫',9,11)] },
+  { id:'r3', film:'ILFORD HP5 PLUS', stock:'HP5 Plus', spec:'135', iso:400, scene:'street',
+    camera:'海鸥 4B', lens:'75mm f/3.5', dev:'广州 · 珠江暗房', devDate:'2026-04-26',
+    source:'scanner', sourceModel:'Plustek OpticFilm 8200i',
+    primary:'2026-04-20', shots:['2026-04-20','2026-04-21'], start:1, count:12,
+    folder:null, segs:[S('潮汕 · 牌坊街',0,7), S('潮汕 · 广济桥',8,11)] },
+  { id:'r5', film:'FUJI VELVIA 50', stock:'Velvia 50', spec:'120', iso:50, scene:'field',
+    camera:'Rolleiflex 3.5F', lens:'Planar 75mm f/3.5', dev:'昆明 · 春城冲扫', devDate:'2026-03-21',
+    source:'scanner', sourceModel:'Epson V850 Pro',
+    primary:'2026-03-15', shots:['2026-03-15'], start:1, count:12,
+    folder:null, segs:[S('大理 · 喜洲古镇',0,11)] },
+  { id:'r11', film:'FUJI PRO 400H', stock:'Pro 400H', spec:'120', iso:400, scene:'field',
+    camera:'Rolleiflex 3.5F', lens:'Planar 75mm f/3.5', dev:'南昌 · 赣江冲印', devDate:'2026-03-04',
+    source:'camera', sourceModel:'Fujifilm X-T5 + 60mm 微距',
+    primary:'2026-02-27', shots:['2026-02-27'], start:1, count:12,
+    folder:'江南水乡', segs:[S('婺源 · 篁岭',0,11)] },
+  { id:'r10', film:'KODAK EKTAR 100', stock:'Ektar 100', spec:'135', iso:100, scene:'alpine',
+    camera:'Nikon FM2', lens:'Nikkor 50mm f/1.4', dev:'哈尔滨 · 冰城冲扫', devDate:'2026-01-25',
+    source:'scanner', sourceModel:'Nikon Coolscan 5000 ED',
+    primary:'2026-01-18', shots:['2026-01-18'], start:1, count:12,
+    folder:null, segs:[S('哈尔滨 · 中央大街',0,11)] }
+];
+
+var GEAR = [
+  {id:'g1', kind:'body', name:'Nikon FM2', sub:'F 卡口 · 1989', rolls:14, ill:'slr'},
+  {id:'g2', kind:'body', name:'Leica M6 Classic', sub:'M 卡口 · 1992', rolls:9, ill:'rf'},
+  {id:'g3', kind:'body', name:'Mamiya RB67 Pro SD', sub:'中画幅 6×7 · 1990', rolls:5, ill:'slr'},
+  {id:'g4', kind:'body', name:'Rolleiflex 3.5F', sub:'双反 6×6 · 1960', rolls:3, ill:'tlr'},
+  {id:'g5', kind:'body', name:'海鸥 4B', sub:'双反 6×6 · 1972', rolls:2, ill:'tlr'},
+  {id:'g6', kind:'lens', name:'Nikkor 50mm f/1.4 AI-S', sub:'F 卡口 · 1981', rolls:12, ill:'lens'},
+  {id:'g7', kind:'lens', name:'Summicron 35mm f/2', sub:'M 卡口 · 1980', rolls:9, ill:'lens'},
+  {id:'g8', kind:'lens', name:'Sekor 90mm f/3.8', sub:'RB 卡口 · 1974', rolls:5, ill:'lens'},
+  {id:'g9', kind:'lens', name:'Nikkor 105mm f/2.5', sub:'F 卡口 · 1971', rolls:4, ill:'lens'}
+];
+
+var STOCK = [
+  {name:'ILFORD DELTA 3200', spec:'135', iso:3200, qty:2,  exp:'2026-09'},
+  {name:'KODAK EKTAR 100',   spec:'135', iso:100,  qty:1,  exp:'2026-10'},
+  {name:'FUJI PRO 400H',     spec:'120', iso:400,  qty:2,  exp:'2026-11'},
+  {name:'KODAK GOLD 200',    spec:'135', iso:200,  qty:4,  exp:'2026-12'},
+  {name:'FUJI VELVIA 50',    spec:'120', iso:50,   qty:3,  exp:'2027-05'},
+  {name:'KODAK PORTRA 400',  spec:'135', iso:400,  qty:5,  exp:'2027-08'},
+  {name:'ILFORD HP5 PLUS',   spec:'135', iso:400,  qty:10, exp:'2028-03'}
+];
+
+var FOLDERS = [];
+ROLLS.forEach(function(r){ if(r.folder && FOLDERS.indexOf(r.folder) < 0) FOLDERS.push(r.folder); });
+FOLDERS.sort();
+
+var TODAY = new Date(2026, 8, 24);
+
+/* ============================================================
+   helpers
+   ============================================================ */
+function rollById(id){ for(var i=0;i<ROLLS.length;i++){ if(ROLLS[i].id===id) return ROLLS[i]; } return null; }
+/** 没有真实照片时的合成帧 —— 保持原样，字节级不变。
+ *  没导入照片的卷渲染结果和以前完全一致，原型继续有效。 */
+function syntheticFrames(roll){
+  var out = [];
+  for(var i=0;i<roll.count;i++){
+    var n = roll.start + Math.floor(i/2);
+    out.push({ i:i, seed: hash(roll.id) + i*13, label: (i % 2 === 0) ? String(n) : n + 'A' });
+  }
+  return out;
+}
+
+/** 双路：有照片就用照片，没有就退回合成帧。
+ *  底片编号沿用 135 的成对编号（1, 1A, 2, 2A…），与画幅无关。 */
+function frames(roll){
+  var ps = roll.photos;
+  if (ps && ps.length) {
+    var out = [];
+    for (var i = 0; i < ps.length; i++) {
+      var n = roll.start + Math.floor(i/2);
+      out.push({
+        i: i,
+        photo: ps[i],
+        seed: hash(ps[i].id),
+        label: (i % 2 === 0) ? String(n) : n + 'A'
+      });
+    }
+    return out;
+  }
+  return syntheticFrames(roll);
+}
+
+/** 一格的画面内容。kind: 'thumbs'（底片条，快）| 'photos'（单帧大图，清晰）。 */
+function frameInner(roll, fr, kind){
+  if (fr.photo) {
+    var src = Native.photoUrl(roll.id, fr.photo.id, kind || 'thumbs');
+    if (src) {
+      return '<img class="ph" src="' + esc(src) + '" loading="lazy" decoding="async" alt="">';
+    }
+  }
+  return sceneSVG(roll.scene, fr.seed);
+}
+
+/** 一卷的封面：有照片就用第一张，否则用合成场景。 */
+function rollThumb(roll){
+  var ps = roll.photos;
+  if (ps && ps.length) {
+    var src = Native.photoUrl(roll.id, ps[0].id, 'thumbs');
+    if (src) return '<img class="ph" src="' + esc(src) + '" loading="lazy" decoding="async" alt="">';
+  }
+  return sceneSVG(roll.scene, hash(roll.id));
+}
+function segOf(roll, idx){
+  for(var i=0;i<roll.segs.length;i++){ if(idx >= roll.segs[i].from && idx <= roll.segs[i].to) return roll.segs[i]; }
+  return null;
+}
+function fmtDate(iso){ return iso.replace(/-/g,'.'); }
+function fmtShort(iso){
+  if (!iso) return '';
+  var p = String(iso).split('-');
+  return p.length >= 3 ? p[1] + '.' + p[2] : String(iso);
+}
+function srcLabel(s){ return s === 'camera' ? '相机翻拍' : '扫描仪'; }
+function srcIcon(s){ return s === 'camera' ? I.camcopy : I.scan; }
+/** 来源 + 具体型号。型号是自由文本，没填就只显示来源。 */
+function srcFull(r){
+  var lab = srcLabel(r.source);
+  return r.sourceModel ? lab + ' · ' + r.sourceModel : lab;
+}
+
+function daysLeft(exp){
+  var p = exp.split('-');
+  var end = new Date(+p[0], +p[1], 0);
+  return Math.round((end - TODAY) / 86400000);
+}
+function expLevel(d){ return d <= 30 ? 'u' : (d <= 90 ? 's' : ''); }
+function expWord(d){
+  if(d < 0) return '已过期';
+  if(d === 0) return '今日到期';
+  return d + ' 天';
+}
+
+/* ============================================================
+   strip rendering
+   ============================================================ */
+function framesHTML(roll, fw){
+  var fh = roll.spec === '120' ? fw : Math.round(fw * 2 / 3);
+  var fr = frames(roll);
+  var html = '';
+  for(var i=0;i<fr.length;i++){
+    html += '<button class="fr" data-act="frame" data-roll="' + roll.id + '" data-i="' + i + '" ' +
+            'aria-label="第 ' + esc(fr[i].label) + ' 格">' +
+            '<span class="frbox" style="width:' + fw + 'px;height:' + fh + 'px">' + frameInner(roll, fr[i], 'thumbs') + '</span>' +
+            '<span class="frnum">' + esc(fr[i].label) + '</span>' +
+            '</button>';
+  }
+  return html;
+}
+
+function segsHTML(roll, fw){
+  var html = '';
+  for(var i=0;i<roll.segs.length;i++){
+    var s = roll.segs[i];
+    var n = s.to - s.from + 1;
+    var w = n*fw + (n-1)*6;
+    html += '<button class="segbar" data-act="seg" data-roll="' + roll.id + '" data-i="' + i + '" ' +
+            'style="width:' + w + 'px" title="' + esc(s.loc) + '">' +
+            I.pin + '<b>' + esc(s.loc) + '</b><i>' + (s.from+1) + '–' + (s.to+1) + '</i></button>';
+  }
+  return html;
+}
+
+function stripHTML(roll, fw){
+  var gap = 6;
+  var cuts = '';
+  for(var i=1;i<roll.segs.length;i++){
+    var x = 8 + roll.segs[i].from * (fw + gap) - gap / 2;
+    cuts += '<span class="cutline" style="left:' + x + 'px"></span>';
+  }
+  return '<div class="strip" style="--gap:' + gap + 'px">' +
+    '<div class="perf top"></div>' +
+    '<div class="stripmid">' +
+      '<div class="segs">' + segsHTML(roll, fw) + '</div>' +
+      '<div class="frames">' + framesHTML(roll, fw) + '</div>' +
+      cuts +
+    '</div>' +
+    '<div class="perf bot"></div>' +
+  '</div>';
+}
+
+function miniStrip(roll, n){
+  var fr = frames(roll).slice(0, n || 5);
+  var fw = roll.spec === '120' ? 88 : 92;
+  var fh = roll.spec === '120' ? 88 : 61;
+  var h = '';
+  for(var i=0;i<fr.length;i++){
+    h += '<span class="mini-f" style="width:' + fw + 'px;height:' + fh + 'px">' + frameInner(roll, fr[i], 'thumbs') + '</span>';
+  }
+  return '<span class="mini">' +
+    '<span class="perf top"></span>' +
+    '<span class="mini-frames">' + h + '</span>' +
+    '<span class="perf bot"></span>' +
+  '</span>';
+}
+
+/* ============================================================
+   device illustrations (already cut out — transparent ground)
+   ============================================================ */
+function deviceSVG(kind){
+  var o = 'fill="none" stroke="#F1E7D7" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"';
+  var dim = 'fill="none" stroke="#A48F76" stroke-width="1.6" stroke-linecap="round"';
+  var glass = 'fill="#E5A03A" fill-opacity=".16" stroke="#E5A03A" stroke-width="1.6"';
+  var s = '<svg viewBox="0 0 120 120" aria-hidden="true">';
+  if(kind === 'lens'){
+    s += '<circle cx="60" cy="60" r="45" ' + o + '/>';
+    s += '<circle cx="60" cy="60" r="45" fill="none" stroke="#A48F76" stroke-width="2.4" stroke-dasharray="2 6"/>';
+    s += '<circle cx="60" cy="60" r="32" ' + dim + '/>';
+    s += '<circle cx="60" cy="60" r="20" ' + glass + '/>';
+    s += '<circle cx="60" cy="60" r="7" fill="#E5A03A" fill-opacity=".35" stroke="#E5A03A" stroke-width="1.4"/>';
+    s += '<path d="M60 15v-6M60 111v-6" ' + dim + '/>';
+  } else if(kind === 'rf'){
+    s += '<rect x="9" y="48" width="102" height="47" rx="7" ' + o + '/>';
+    s += '<rect x="31" y="40" width="24" height="10" rx="3" ' + dim + '/>';
+    s += '<rect x="84" y="42" width="17" height="8" rx="3" ' + dim + '/>';
+    s += '<circle cx="62" cy="72" r="23" ' + o + '/>';
+    s += '<circle cx="62" cy="72" r="13" ' + glass + '/>';
+    s += '<circle cx="21" cy="57" r="5.5" ' + dim + '/>';
+    s += '<path d="M9 62h9" ' + dim + '/>';
+  } else if(kind === 'tlr'){
+    s += '<rect x="26" y="24" width="68" height="76" rx="8" ' + o + '/>';
+    s += '<rect x="24" y="16" width="72" height="9" rx="4" ' + dim + '/>';
+    s += '<circle cx="60" cy="46" r="16" ' + o + '/>';
+    s += '<circle cx="60" cy="80" r="16" ' + o + '/>';
+    s += '<circle cx="60" cy="80" r="8" ' + glass + '/>';
+    s += '<circle cx="60" cy="46" r="8" ' + dim + '/>';
+    s += '<path d="M96 40h10M96 52h10" ' + dim + '/>';
+  } else {
+    s += '<rect x="13" y="47" width="94" height="51" rx="8" ' + o + '/>';
+    s += '<path d="M45 47v-9h30v9" ' + o + '/>';
+    s += '<circle cx="60" cy="73" r="24" ' + o + '/>';
+    s += '<circle cx="60" cy="73" r="13" ' + glass + '/>';
+    s += '<rect x="80" y="36" width="19" height="9" rx="3.5" ' + dim + '/>';
+    s += '<circle cx="26" cy="57" r="6" ' + dim + '/>';
+    s += '<path d="M13 63h9" ' + dim + '/>';
+  }
+  return s + '</svg>';
+}
+
+/* ============================================================
+   state
+   ============================================================ */
+var state = {
+  tab:'film',
+  screen:'list',
+  rollId:null,
+  listMode:'time',
+  folder:null,
+  calY:2026,
+  calM:8,
+  calDay:null,
+  gearKind:'all',
+  sheet:null,
+  sheetArg:null,
+  segStart:1,
+  wmStyle:'cream',
+  importKeep:false,
+  importProgress:null,
+  cutout:null,
+  cutoutTarget:'',
+  toast:''
+};
+
+var TABS = [
+  {k:'film', label:'底片',   icon:I.film},
+  {k:'cal',  label:'日历',   icon:I.cal},
+  {k:'cam',  label:'相机',   icon:I.cam},
+  {k:'stock',label:'胶卷',   icon:I.roll}
+];
+
+/* ============================================================
+   views
+   ============================================================ */
+function viewFilmList(){
+  var list = ROLLS.filter(function(r){ return !state.folder || r.folder === state.folder; });
+  var body = '';
+
+  if(state.listMode === 'time'){
+    list = list.slice().sort(function(a,b){ return b.primary.localeCompare(a.primary); });
+    body = list.map(function(r){
+      var segs = r.segs.map(function(s){ return s.loc; }).join(' · ');
+      return '<button class="card" data-act="roll" data-id="' + r.id + '">' +
+        miniStrip(r, 5) +
+        '<span class="card-b">' +
+          '<span class="card-r1"><span class="filmname">' + esc(r.film) + '</span>' +
+            '<span class="specbadge">' + r.spec + '</span></span>' +
+          '<span class="card-r2">' +
+            [r.camera, segs.split(' · ')[0], fmtShort(r.primary)]
+              .filter(function(x){ return !!x; })
+              .map(function(x){ return '<span>' + esc(x) + '</span>'; })
+              .join('<i class="dotsep"></i>') +
+          '</span>' +
+          '<span class="card-r3">' +
+            '<span class="srcchip">' + srcIcon(r.source) + srcLabel(r.source) + '</span>' +
+            (r.dev ? '<span class="lab">' + esc(r.dev) + '</span>' : '') +
+            (r.devDate ? '<span class="lab">' + fmtShort(r.devDate) + ' 冲洗</span>' : '') +
+          '</span>' +
+        '</span>' +
+      '</button>';
+    }).join('');
+  } else {
+    var groups = {};
+    list.forEach(function(r){ (groups[r.film] = groups[r.film] || []).push(r); });
+    var keys = Object.keys(groups).sort(function(a,b){ return groups[b].length - groups[a].length || a.localeCompare(b); });
+    body = keys.map(function(film){
+      var rs = groups[film].slice().sort(function(a,b){ return b.primary.localeCompare(a.primary); });
+      return '<div class="grp">' +
+        '<div class="grp-h"><span class="grp-t">' + esc(film) + '</span>' +
+          '<span class="grp-c">' + rs.length + ' 卷 · ' + rs[0].spec + '</span></div>' +
+        rs.map(function(r){
+          return '<button class="row" data-act="roll" data-id="' + r.id + '">' +
+            '<span class="rowthumb">' + rollThumb(r) + '</span>' +
+            '<span class="rowbody">' +
+              '<span class="rowt">' + fmtDate(r.primary) + ' · ' + esc(r.camera) + '</span>' +
+              '<span class="rows">' + esc(r.segs[0].loc) + ' · ' + r.segs.length + ' 段</span>' +
+            '</span>' +
+            '<span class="rowend">' + r.spec + '</span>' +
+          '</button>';
+        }).join('') +
+      '</div>';
+    }).join('');
+  }
+
+  var chips = '<button class="chip" data-act="folder" data-f="" aria-pressed="' + (state.folder === null) + '">全部</button>' +
+    FOLDERS.map(function(f){
+      return '<button class="chip" data-act="folder" data-f="' + esc(f) + '" aria-pressed="' + (state.folder === f) + '">' +
+        I.folder + esc(f) + '</button>';
+    }).join('') +
+    '<button class="chip" data-act="newFolder">' + I.plus + '新建文件夹</button>';
+
+  return '<div class="hd">' +
+      '<div><h2>底片</h2><div class="sub">' + ROLLS.length + ' 卷 · ' + FOLDERS.length + ' 个文件夹</div></div>' +
+      '<div style="display:flex;gap:8px">' +
+        '<button class="iconbtn" data-act="settings" aria-label="设置">' + I.cog + '</button>' +
+      '</div>' +
+    '</div>' +
+    '<div style="padding:0 18px 14px">' +
+      '<div class="segctl" role="group" aria-label="浏览模式">' +
+        '<button data-act="mode" data-m="time" aria-pressed="' + (state.listMode === 'time') + '">按拍摄时间</button>' +
+        '<button data-act="mode" data-m="film" aria-pressed="' + (state.listMode === 'film') + '">按胶卷分类</button>' +
+      '</div>' +
+    '</div>' +
+    '<div class="chiprow">' + chips + '</div>' +
+    '<div class="scrollpad">' + body + '</div>';
+}
+
+function viewRoll(){
+  var r = rollById(state.rollId);
+  if(!r) return viewFilmList();
+  var fw = r.spec === '120' ? 128 : 124;
+
+  var seglist = r.segs.map(function(s,i){
+    var n = s.to - s.from + 1;
+    return '<button class="segitem" data-act="seg" data-roll="' + r.id + '" data-i="' + i + '">' +
+      '<span style="min-width:0;flex:1">' +
+        '<span class="loc" style="display:block">' + esc(s.loc) + '</span>' +
+        '<span class="rng">底片 ' + (s.from+1) + '–' + (s.to+1) + ' 格</span>' +
+      '</span>' +
+      '<span class="cnt">' + n + ' 张</span>' +
+    '</button>';
+  }).join('');
+
+  return '<div class="topbar">' +
+      '<button class="iconbtn" data-act="back" aria-label="返回">' + I.left + '</button>' +
+      '<span class="tt">' + esc(r.film) + ' · ' + fmtDate(r.primary) + '</span>' +
+      '<button class="iconbtn" data-act="editRoll" data-id="' + r.id + '" aria-label="编辑信息">' + I.pen + '</button>' +
+    '</div>' +
+
+    '<div class="boxlabel">' +
+      '<div class="bl-top">' +
+        '<div style="min-width:0">' +
+          '<div class="bl-film">' + esc(r.film) + '</div>' +
+          '<div class="bl-sub">COLOR · ISO ' + r.iso + ' · ' + r.spec + '</div>' +
+        '</div>' +
+        '<div class="bl-spec">' + r.spec + '</div>' +
+      '</div>' +
+      '<dl class="bl-grid">' +
+        '<div><dt>机身</dt><dd>' + esc(r.camera) + '</dd></div>' +
+        '<div><dt>镜头</dt><dd>' + esc(r.lens) + '</dd></div>' +
+        '<div><dt>拍摄日期</dt><dd class="mono">' + fmtDate(r.shots[0]) +
+          (r.shots.length > 1 ? ' – ' + fmtDate(r.shots[r.shots.length-1]).slice(5) : '') + '</dd></div>' +
+        '<div><dt>冲洗日期</dt><dd class="mono">' + fmtDate(r.devDate) + '</dd></div>' +
+        '<div><dt>冲洗店</dt><dd>' + esc(r.dev) + '</dd></div>' +
+        '<div><dt>导入来源</dt><dd>' + esc(srcLabel(r.source)) +
+          (r.sourceModel ? '<br><span class="dim">' + esc(r.sourceModel) + '</span>' : '') +
+          '</dd></div>' +
+      '</dl>' +
+      '<button class="bl-edit" data-act="editRoll" data-id="' + r.id + '">' + I.pen + '编辑胶卷信息</button>' +
+    '</div>' +
+
+    '<div class="sec-h"><h3>长条底片</h3><span class="rule"></span>' +
+      '<button data-act="import" data-roll="' + r.id + '">' + I.up + '导入照片</button>' +
+      '<button data-act="addSeg" data-roll="' + r.id + '">' + I.cut + '添加分段</button></div>' +
+
+    (function(){
+      var fr = frames(r);
+      if (!fr.length) {
+        return '<div class="filmview"><div class="emptyfilm">' +
+          '这一卷还没有照片<br><span>点上面的「导入照片」从相册选</span></div></div>';
+      }
+      return '<div class="filmview">' +
+        '<div class="stripwrap">' + stripHTML(r, fw) + '</div>' +
+        '<div class="striptag">' + esc(r.film) + ' · ' + r.spec + ' · ISO ' + r.iso + '</div>' +
+        '<div class="striphint">' + fr.length + ' EXP</div>' +
+      '</div>';
+    })() +
+
+    '<div class="sec-h"><h3>分段地点</h3><span class="rule"></span>' +
+      '<span style="font-family:\'Space Mono\',monospace;font-size:10.5px;color:var(--tx3)">' +
+      r.segs.length + ' 段</span></div>' +
+    '<div class="seglist">' + seglist + '</div>' +
+
+    '<div class="actionbar">' +
+      '<button class="btn" data-act="exportOverview" data-id="' + r.id + '">' + I.dl + '总览大图</button>' +
+      '<button class="btn primary" data-act="exportBorder" data-id="' + r.id + '" data-i="0">' + I.spark + '水印边框</button>' +
+    '</div>';
+}
+
+function viewCalendar(){
+  var y = state.calY, m = state.calM;
+  var first = new Date(y, m, 1);
+  var days = new Date(y, m+1, 0).getDate();
+  var lead = first.getDay();
+
+  var byDay = {};
+  ROLLS.forEach(function(r){
+    r.shots.forEach(function(d){
+      var p = d.split('-');
+      if(+p[0] === y && (+p[1] - 1) === m){
+        (byDay[+p[2]] = byDay[+p[2]] || []).push(r);
+      }
+    });
+  });
+
+  var monthRolls = [];
+  Object.keys(byDay).forEach(function(d){
+    byDay[d].forEach(function(r){ if(monthRolls.indexOf(r) < 0) monthRolls.push(r); });
+  });
+  var monthFrames = monthRolls.reduce(function(a,r){ return a + r.count; }, 0);
+
+  var cells = '';
+  for(var i=0;i<lead;i++) cells += '<span class="cal-d pad"></span>';
+  for(var d=1; d<=days; d++){
+    var rs = byDay[d];
+    var isSel = state.calDay === d;
+    var dots = rs ? '<span class="cnt">' + rs.map(function(){ return '<i></i>'; }).join('') + '</span>' : '<span class="cnt"></span>';
+    cells += '<button class="cal-d' + (rs ? ' has' : '') + '"' +
+      (rs ? ' data-act="calday" data-d="' + d + '"' : '') +
+      ' aria-pressed="' + isSel + '"' + (rs ? '' : ' tabindex="-1"') + '>' +
+      '<span>' + d + '</span>' + dots + '</button>';
+  }
+
+  var shown;
+  if(state.calDay){
+    shown = byDay[state.calDay] || [];
+  } else {
+    shown = monthRolls.slice().sort(function(a,b){ return a.primary.localeCompare(b.primary); });
+  }
+  var shownTitle = state.calDay ? (m+1) + ' 月 ' + state.calDay + ' 日' : (m+1) + ' 月全部';
+
+  var listHTML = shown.length ? shown.map(function(r){
+    return '<button class="row" data-act="roll" data-id="' + r.id + '">' +
+      '<span class="rowthumb">' + rollThumb(r) + '</span>' +
+      '<span class="rowbody">' +
+        '<span class="rowt">' + esc(r.film) + '</span>' +
+        '<span class="rows">' + fmtDate(r.shots[0]) + ' · ' + esc(r.camera) + ' · ' + esc(r.segs[0].loc) + '</span>' +
+      '</span>' +
+      '<span class="rowend">' + I.right + '</span>' +
+    '</button>';
+  }).join('') : '<p style="font-size:12.5px;color:var(--tx3);text-align:center;padding:26px 0;margin:0">这一天没有拍摄记录</p>';
+
+  var counts = new Array(12).fill(0);
+  ROLLS.forEach(function(r){
+    var seen = {};
+    r.shots.forEach(function(d){
+      var p = d.split('-');
+      if(+p[0] === y && !seen[+p[1]-1]){ seen[+p[1]-1] = 1; counts[+p[1]-1]++; }
+    });
+  });
+  var max = Math.max.apply(null, counts) || 1;
+  var bars = counts.map(function(c,i){
+    var h = c ? Math.max(12, Math.round(c/max*100)) : 3;
+    return '<div class="yb-c' + (i === m ? ' cur' : '') + '">' +
+      '<span class="yb-bar' + (c ? '' : ' zero') + '" style="height:' + h + '%"></span>' +
+      '<span class="yb-l">' + (i+1) + '</span></div>';
+  }).join('');
+
+  return '<div class="hd"><div><h2>摄影日历</h2>' +
+      '<div class="sub">按拍摄日期索引胶卷档案</div></div></div>' +
+
+    '<div class="calnav">' +
+      '<button class="iconbtn" data-act="calprev" aria-label="上个月">' + I.left + '</button>' +
+      '<span class="ym">' + y + ' <small>年</small> ' + (m+1) + ' <small>月</small></span>' +
+      '<span class="sp"></span>' +
+      '<button class="iconbtn" data-act="calnext" aria-label="下个月">' + I.right + '</button>' +
+    '</div>' +
+
+    '<div class="calstats">' +
+      '<div><div class="k">本月拍摄</div><div class="v">' + monthRolls.length + '<u>卷</u></div></div>' +
+      '<div><div class="k">画面</div><div class="v">' + monthFrames + '<u>张</u></div></div>' +
+      '<div><div class="k">机身</div><div class="v">' +
+        (function(){ var s = {}; monthRolls.forEach(function(r){ s[r.camera] = 1; }); return Object.keys(s).length; })() +
+        '<u>台</u></div></div>' +
+    '</div>' +
+
+    '<div class="cal">' +
+      '<div class="cal-dow"><span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span></div>' +
+      '<div class="cal-grid">' + cells + '</div>' +
+    '</div>' +
+
+    '<div class="yearbars">' +
+      '<div class="yb-h"><h3>全年拍摄量</h3><span class="rule"></span><em>' + y + ' · ' +
+        counts.reduce(function(a,b){ return a+b; }, 0) + ' 卷</em></div>' +
+      '<div class="yb">' + bars + '</div>' +
+    '</div>' +
+
+    '<div class="sec-h"><h3>' + shownTitle + '</h3><span class="rule"></span>' +
+      (state.calDay ? '<button data-act="calclear">显示全月</button>' : '') + '</div>' +
+    '<div class="scrollpad">' + listHTML + '</div>';
+}
+
+function viewGear(){
+  var list = GEAR.filter(function(g){ return state.gearKind === 'all' || g.kind === state.gearKind; });
+  var bodies = GEAR.filter(function(g){ return g.kind === 'body'; }).length;
+  var lenses = GEAR.length - bodies;
+
+  var cards = list.map(function(g){
+    return '<button class="gearcard" data-act="gear" data-id="' + g.id + '">' +
+      '<span class="gearshot">' + gearImage(g) +
+        '<span class="cutbadge">' + I.spark + '已抠图</span>' +
+      '</span>' +
+      '<span class="gearbody">' +
+        '<span class="gearname" style="display:block">' + esc(g.name) + '</span>' +
+        '<span class="gearsub" style="display:block">' + esc(g.sub) + '</span>' +
+        '<span class="gearmeta">' +
+          '<span class="kind">' + (g.kind === 'body' ? '机身' : '镜头') + '</span>' +
+          '<span style="margin-left:auto">' + g.rolls + ' 卷</span>' +
+        '</span>' +
+      '</span>' +
+    '</button>';
+  }).join('');
+
+  return '<div class="hd"><div><h2>相机仓库</h2>' +
+      '<div class="sub">' + bodies + ' 机身 · ' + lenses + ' 镜头</div></div>' +
+      '<button class="iconbtn" data-act="addGear" aria-label="新增设备">' + I.plus + '</button>' +
+    '</div>' +
+    '<div style="padding:0 18px 16px">' +
+      '<div class="segctl" role="group" aria-label="设备类型">' +
+        '<button data-act="gearkind" data-k="all" aria-pressed="' + (state.gearKind === 'all') + '">全部</button>' +
+        '<button data-act="gearkind" data-k="body" aria-pressed="' + (state.gearKind === 'body') + '">机身</button>' +
+        '<button data-act="gearkind" data-k="lens" aria-pressed="' + (state.gearKind === 'lens') + '">镜头</button>' +
+      '</div>' +
+    '</div>' +
+    '<div class="geargrid">' + cards + '</div>' +
+    '<div style="height:84px"></div>';
+}
+
+function viewStock(){
+  var total = STOCK.reduce(function(a,s){ return a + s.qty; }, 0);
+  var urgent = STOCK.filter(function(s){ return daysLeft(s.exp) <= 90; }).length;
+  var sorted = STOCK.slice().sort(function(a,b){ return a.exp.localeCompare(b.exp); });
+  var maxD = Math.max.apply(null, sorted.map(function(s){ return Math.max(1, daysLeft(s.exp)); }));
+
+  var rows = sorted.map(function(s){
+    var d = daysLeft(s.exp);
+    var lvl = expLevel(d);
+    var w = Math.max(3, Math.round(Math.min(1, d/maxD) * 100));
+    return '<button class="stockrow ' + (lvl === 'u' ? 'urgent' : lvl === 's' ? 'soon' : '') + '" data-act="stock" data-n="' + esc(s.name) + '">' +
+      '<span class="sr-top">' +
+        '<span class="sr-name">' + esc(s.name) + '</span>' +
+        '<span class="specbadge" style="margin-left:0">' + s.spec + '</span>' +
+        '<span class="sr-qty">×' + s.qty + '</span>' +
+      '</span>' +
+      '<span class="sr-mid">' +
+        '<span class="iso">ISO ' + s.iso + '</span>' +
+        '<i class="dotsep"></i>' +
+        '<span>过期 ' + s.exp.replace('-', '.') + '</span>' +
+        '<span class="expchip ' + lvl + '">' + expWord(d) + '</span>' +
+      '</span>' +
+      '<span class="urgbar ' + lvl + '"><i style="width:' + w + '%"></i></span>' +
+    '</button>';
+  }).join('');
+
+  return '<div class="hd"><div><h2>胶卷仓库</h2>' +
+      '<div class="sub">库存 ' + total + ' 卷 · ' + STOCK.length + ' 款</div></div>' +
+      '<button class="iconbtn" data-act="addStock" aria-label="新增胶卷">' + I.plus + '</button>' +
+    '</div>' +
+    '<div class="stockstats">' +
+      '<div><div class="k">现有库存</div><div class="v">' + total + '</div></div>' +
+      '<div><div class="k">胶卷款数</div><div class="v">' + STOCK.length + '</div></div>' +
+      '<div class="warn"><div class="k">临近过期</div><div class="v">' + urgent + '</div></div>' +
+    '</div>' +
+    '<div class="sorthint">' + I.sortup + '按过期时间由近到远 · 临近过期优先展示</div>' +
+    '<div class="stocklist">' + rows + '</div>' +
+    '<div style="height:84px"></div>';
+}
+
+/* ============================================================
+   sheets
+   ============================================================ */
+function sheetSeg(rollId, idx){
+  var r = rollById(rollId);
+  var s = r.segs[idx];
+  var suggestions = [];
+  ROLLS.forEach(function(x){
+    x.segs.forEach(function(y){ if(suggestions.indexOf(y.loc) < 0 && y.loc !== s.loc) suggestions.push(y.loc); });
+  });
+  suggestions = suggestions.slice(0, 5);
+  return '<div class="grab"></div>' +
+    '<h3>标记拍摄地点</h3>' +
+    '<p class="sh-sub">底片 ' + (s.from+1) + '–' + (s.to+1) + ' 格（' + (s.to-s.from+1) + ' 张）共用一个地点。地点为自由文本，随意填写。</p>' +
+    '<div class="field">' +
+      '<label for="segLoc">地点</label>' +
+      '<input type="text" id="segLoc" value="' + esc(s.loc) + '" placeholder="例如：青岛 · 栈桥">' +
+    '</div>' +
+    '<div class="field">' +
+      '<label>最近用过</label>' +
+      '<div style="display:flex;flex-wrap:wrap;gap:7px">' +
+        suggestions.map(function(t){
+          return '<button class="chip" data-act="segPick" data-t="' + esc(t) + '">' + esc(t) + '</button>';
+        }).join('') +
+      '</div>' +
+    '</div>' +
+    '<div class="sheet-actions">' +
+      '<button class="btn ghost" data-act="closeSheet">取消</button>' +
+      '<button class="btn primary" data-act="segSave" data-roll="' + rollId + '" data-i="' + idx + '">保存地点</button>' +
+    '</div>';
+}
+
+function sheetAddSeg(rollId){
+  var r = rollById(rollId);
+  var chips = [];
+  for(var i=1;i<r.count;i++){
+    chips.push('<button class="chip" data-act="segStart" data-i="' + i + '" aria-pressed="' + (state.segStart === i) + '">' + (i+1) + '</button>');
+  }
+  var start = state.segStart == null ? 1 : state.segStart;
+  return '<div class="grab"></div>' +
+    '<h3>添加分段</h3>' +
+    '<p class="sh-sub">选择新分段的起始底片格号，这一段会从该格开始一直到下一段的起点。</p>' +
+    '<div class="field">' +
+      '<label>起始格</label>' +
+      '<div style="display:flex;flex-wrap:wrap;gap:7px">' + chips.join('') + '</div>' +
+    '</div>' +
+    '<div class="field">' +
+      '<label for="newSegLoc">拍摄地点</label>' +
+      '<input type="text" id="newSegLoc" placeholder="例如：青岛 · 八大关">' +
+      '<div class="hint">' + I.info + '地点可随时修改，不受任何预设限制。</div>' +
+    '</div>' +
+    '<div class="sheet-actions">' +
+      '<button class="btn ghost" data-act="closeSheet">取消</button>' +
+      '<button class="btn primary" data-act="segAdd" data-roll="' + rollId + '" data-i="' + start + '">建立分段</button>' +
+    '</div>';
+}
+
+function sheetEditRoll(rollId){
+  var r = rollById(rollId);
+  return '<div class="grab"></div>' +
+    '<h3>编辑胶卷信息</h3>' +
+    '<p class="sh-sub">胶卷型号与相机型号均可自由手输，预设只作为快捷建议。</p>' +
+    '<div class="field">' +
+      '<label for="fFilm">胶卷型号</label>' +
+      '<input type="text" id="fFilm" value="' + esc(r.film) + '" placeholder="任意品牌与型号">' +
+      '<div class="hint">' + I.info + '不受预设选项限制，直接输入即可。</div>' +
+    '</div>' +
+    '<div class="fieldrow">' +
+      '<div class="field"><label>胶卷规格</label>' +
+        '<div class="segctl" id="fSpec" style="width:100%">' +
+          '<button data-act="pickSpec" data-v="135" aria-pressed="' + (r.spec === '135') + '" style="flex:1">135</button>' +
+          '<button data-act="pickSpec" data-v="120" aria-pressed="' + (r.spec === '120') + '" style="flex:1">120</button>' +
+        '</div></div>' +
+      '<div class="field"><label>ISO</label>' +
+        '<input type="text" id="fIso" value="' + r.iso + '"></div>' +
+    '</div>' +
+    '<div class="field">' +
+      '<label for="fCam">相机型号</label>' +
+      '<input type="text" id="fCam" value="' + esc(r.camera) + '">' +
+      '<div class="hint">' + I.info + '与相机仓库联动，也可输入未登记的机身。</div>' +
+    '</div>' +
+    '<div class="field">' +
+      '<label for="fLens">镜头</label>' +
+      '<input type="text" id="fLens" value="' + esc(r.lens) + '">' +
+    '</div>' +
+    '<div class="field">' +
+      '<label>导入来源</label>' +
+      '<div class="segctl" style="width:100%">' +
+        '<button data-act="pickSrc" data-v="scanner" aria-pressed="' + (r.source === 'scanner') + '" style="flex:1">扫描仪</button>' +
+        '<button data-act="pickSrc" data-v="camera" aria-pressed="' + (r.source === 'camera') + '" style="flex:1">相机翻拍</button>' +
+      '</div>' +
+    '</div>' +
+    '<div class="field">' +
+      '<label for="fSrcModel">来源型号</label>' +
+      '<input type="text" id="fSrcModel" value="' + esc(r.sourceModel || '') + '" ' +
+        'placeholder="' + (r.source === 'camera' ? '例如 Sony A7R IV + 50mm 微距' : '例如 Nikon Coolscan 5000 ED') + '">' +
+      '<div class="hint">' + I.info + '自由输入，不受预设限制。相机翻拍建议连镜头一起写，方便回溯当时的翻拍方案。</div>' +
+    '</div>' +
+    '<div class="field">' +
+      '<label for="fDev">冲洗店名称</label>' +
+      '<input type="text" id="fDev" value="' + esc(r.dev) + '">' +
+    '</div>' +
+    '<div class="fieldrow">' +
+      '<div class="field"><label>拍摄日期</label>' +
+        '<input type="date" id="fShot" value="' + r.shots[0] + '"></div>' +
+      '<div class="field"><label>冲洗日期</label>' +
+        '<input type="date" id="fDevDate" value="' + r.devDate + '"></div>' +
+    '</div>' +
+    '<div class="sheet-actions">' +
+      '<button class="btn ghost" data-act="closeSheet">取消</button>' +
+      '<button class="btn primary" data-act="editSave" data-roll="' + rollId + '">保存</button>' +
+    '</div>';
+}
+
+function sheetFrame(rollId, idx){
+  var r = rollById(rollId);
+  var s = segOf(r, idx);
+  var fr = frames(r)[idx];
+  return '<div class="grab"></div>' +
+    '<div class="framebig">' + frameInner(r, fr, 'photos') + '</div>' +
+    '<div class="metagrid">' +
+      '<div><div class="k">底片编号</div><div class="v mono">' + esc(fr.label) + '</div></div>' +
+      '<div><div class="k">胶卷</div><div class="v mono">' + esc(r.film) + '</div></div>' +
+      '<div><div class="k">拍摄地点</div><div class="v">' + esc(s ? s.loc : '未标记') + '</div></div>' +
+      '<div><div class="k">相机型号</div><div class="v">' + esc(r.camera) + '</div></div>' +
+      '<div><div class="k">拍摄时间</div><div class="v mono">' + fmtDate(r.shots[0]) + '</div></div>' +
+      '<div><div class="k">冲洗</div><div class="v">' + esc(r.dev) + '</div></div>' +
+    '</div>' +
+    '<div class="sheet-actions">' +
+      '<button class="btn ghost" data-act="seg" data-roll="' + r.id + '" data-i="' +
+        r.segs.indexOf(s) + '">' + I.pin + '改地点</button>' +
+      '<button class="btn primary" data-act="exportBorder" data-id="' + r.id + '" data-i="' + idx + '">' + I.spark + '水印边框</button>' +
+    '</div>';
+}
+
+function sheetOverview(rollId){
+  var r = rollById(rollId);
+  return '<div class="grab"></div>' +
+    '<h3>胶卷总览大图</h3>' +
+    '<p class="sh-sub">整卷底片拼为一张长图，带片头信息与分段地点标注，可横向查看。</p>' +
+    '<div class="poster">' +
+      '<div class="poster-hd">' +
+        '<div style="min-width:0">' +
+          '<div class="pt">' + esc(r.film) + '</div>' +
+          '<div class="ps">' + esc(r.camera) + ' · ' + esc(r.lens) + '<br>' +
+            fmtDate(r.shots[0]) + ' 拍摄 / ' + fmtDate(r.devDate) + ' 冲洗 · ' + esc(r.dev) + '</div>' +
+        '</div>' +
+        '<div class="pn">' + r.spec + '<br>ISO ' + r.iso + '<br>' + r.count + ' EXP</div>' +
+      '</div>' +
+      '<div class="stripwrap">' + stripHTML(r, 74) + '</div>' +
+      '<div class="poster-ft"><span>' + r.segs.length + ' 段 · ' +
+        r.segs.map(function(s){ return s.loc; }).join(' / ') + '</span><span>菲林档案</span></div>' +
+    '</div>' +
+    '<div class="exportmeta">' +
+      '<span>最长 6000 px 宽</span><span>JPG</span><span>' + srcLabel(r.source) + '</span><span>含地点标注</span>' +
+    '</div>' +
+    '<div class="sheet-actions">' +
+      '<button class="btn ghost" data-act="closeSheet">取消</button>' +
+      '<button class="btn primary" data-act="exportOverviewGo" data-roll="' + r.id + '">' + I.dl + '保存到相册</button>' +
+    '</div>';
+}
+
+function sheetBorder(rollId, idx){
+  var r = rollById(rollId);
+  var fr = frames(r)[idx];
+  var s = segOf(r, idx);
+  var styles = [['cream','白边'],['ink','黑边'],['sprocket','齿孔']];
+  return '<div class="grab"></div>' +
+    '<h3>胶片水印边框</h3>' +
+    '<p class="sh-sub">为单张照片套上胶片风格边框，记录拍摄地点、拍摄时间与相机型号。</p>' +
+    '<div class="wm wm-' + state.wmStyle + '">' +
+      '<div class="wm-photo">' + frameInner(r, fr, 'photos') + '</div>' +
+      '<div class="wm-meta">' +
+        '<div class="wm-loc">' + esc(s ? s.loc : '未标记地点') + '</div>' +
+        '<div class="wm-line">' +
+          // 相机可能没填，空字段不能留下孤立的分隔点
+          (function(){
+            var parts = [fmtDate(r.shots[0])];
+            if (r.camera) parts.push(esc(r.camera));
+            if (r.film) parts.push(esc(r.film));
+            return parts.map(function(x){ return '<span>' + x + '</span>'; }).join('<i></i>');
+          })() +
+        '</div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="field" style="margin-top:18px">' +
+      '<label>边框样式</label>' +
+      '<div class="segctl" style="width:100%">' +
+        styles.map(function(x){
+          return '<button data-act="wmstyle" data-v="' + x[0] + '" aria-pressed="' + (state.wmStyle === x[0]) +
+            '" style="flex:1">' + x[1] + '</button>';
+        }).join('') +
+      '</div>' +
+    '</div>' +
+    '<div class="exportmeta">' +
+      '<span>2180 × 1603 px</span><span>地点 + 时间 + 机身</span><span>' + r.spec + '</span>' +
+    '</div>' +
+    '<div class="sheet-actions">' +
+      '<button class="btn ghost" data-act="closeSheet">取消</button>' +
+      '<button class="btn primary" data-act="exportBorderGo" data-roll="' + r.id + '" data-i="' + idx + '">' + I.dl + '保存到相册</button>' +
+    '</div>';
+}
+
+/* ============================================================
+   照片导入
+   ============================================================ */
+
+function todayISO(){
+  var d = new Date();
+  return d.getFullYear() + '-' +
+    ('0' + (d.getMonth() + 1)).slice(-2) + '-' +
+    ('0' + d.getDate()).slice(-2);
+}
+
+function fmtBytes(n){
+  if (!n || n <= 0) return '';
+  if (n < 1024) return n + ' B';
+  if (n < 1024 * 1024) return (n / 1024).toFixed(0) + ' KB';
+  if (n < 1024 * 1024 * 1024) return (n / 1048576).toFixed(1) + ' MB';
+  return (n / 1073741824).toFixed(2) + ' GB';
+}
+
+function keepHint(keep){
+  return keep
+    ? '原片按字节原样存进 App 私有目录，不解码不重编码。一卷 36 张扫描件可能占 2–3 GB。'
+    : '只存长边 ' + SETTINGS.displayPx + 'px 的压缩副本，一卷 36 张约 15 MB。原图留在你的相册里。';
+}
+
+/**
+ * 照片数量变化后重整分段。
+ *
+ * 新导入的照片会追加到末尾，所以已有的分段要跟着调整：
+ * 越界的截断，最后一段延伸到覆盖新增的照片。
+ * 一卷原本只有合成帧（count>0 但没有 photos）时，分段会被整卷替换掉 ——
+ * 那些分段对应的是合成帧的序号，对真实照片没有意义。
+ */
+function reconcileSegs(r){
+  var n = (r.photos || []).length;
+  if (!n) return;
+
+  if (!r.segs || !r.segs.length) {
+    r.segs = [{ loc: '未标记地点', from: 0, to: n - 1 }];
+    return;
+  }
+
+  var out = [];
+  for (var i = 0; i < r.segs.length; i++) {
+    var s = r.segs[i];
+    if (s.from >= n) continue;                     // 整段越界，丢掉
+    out.push({ loc: s.loc, from: s.from, to: Math.min(s.to, n - 1) });
+  }
+  if (!out.length) {
+    r.segs = [{ loc: '未标记地点', from: 0, to: n - 1 }];
+    return;
+  }
+  out[out.length - 1].to = n - 1;                  // 最后一段吃掉新增的
+  r.segs = out;
+}
+
+function sheetImport(rollId){
+  var r = rollById(rollId);
+  if (!r) return '';
+  var keep = !!state.importKeep;
+  var free = fmtBytes(APP.freeBytes);
+  var have = (r.photos || []).length;
+
+  return '<div class="grab"></div>' +
+    '<h3>导入照片</h3>' +
+    '<p class="sh-sub">从相册选择照片，按你选的顺序拼进这一卷的长条底片。' +
+      (have ? '当前已有 ' + have + ' 张，新照片会追加到末尾。' : '') + '</p>' +
+
+    '<div class="field">' +
+      '<label>存储方式</label>' +
+      '<div class="segctl" style="width:100%">' +
+        '<button data-act="importKeep" data-v="0" aria-pressed="' + (!keep) + '" style="flex:1">仅压缩副本</button>' +
+        '<button data-act="importKeep" data-v="1" aria-pressed="' + (keep) + '" style="flex:1">保留原片</button>' +
+      '</div>' +
+      '<div class="hint">' + I.info + '<span id="keepHint">' + keepHint(keep) + '</span></div>' +
+    '</div>' +
+
+    '<div class="exportmeta">' +
+      '<span>展示副本 ' + SETTINGS.displayPx + 'px</span>' +
+      '<span>缩略图 ' + SETTINGS.thumbPx + 'px</span>' +
+      (free ? '<span>剩余 ' + free + '</span>' : '') +
+    '</div>' +
+
+    '<div class="sheet-actions">' +
+      '<button class="btn ghost" data-act="closeSheet">取消</button>' +
+      '<button class="btn primary" data-act="importGo" data-roll="' + rollId + '">' + I.up + '选择照片</button>' +
+    '</div>';
+}
+
+function sheetImporting(){
+  var p = state.importProgress || { done: 0, total: 0 };
+  var pct = p.total ? Math.round(p.done / p.total * 100) : 0;
+  return '<div class="grab"></div>' +
+    '<h3>正在导入</h3>' +
+    '<p class="sh-sub">' + p.done + ' / ' + p.total + ' 张 —— 大图解码比较慢，请稍候。</p>' +
+    '<div class="urgbar s" style="height:6px;margin-top:4px"><i style="width:' + pct + '%"></i></div>' +
+    '<div class="sheet-actions single" style="margin-top:22px">' +
+      '<button class="btn ghost" data-act="importCancel">停止导入</button>' +
+    '</div>';
+}
+
+/* 原生 / 浏览器导入都会回调到这里 —— 两条路径共用同一段处理逻辑。 */
+window.__bridge.onImportProgress = function(json){
+  var o;
+  try { o = JSON.parse(json); } catch(e){ return; }
+  state.importProgress = { done: o.done || 0, total: o.total || 0 };
+  if (o.error) Native.log('warn', '导入失败 ' + (o.failedName || '') + '：' + o.error);
+  if (state.sheet === 'importing') renderSheet();
+};
+
+window.__bridge.onImportDone = function(json){
+  var o;
+  try { o = JSON.parse(json); } catch(e){ Native.log('error', 'onImportDone 解析失败'); return; }
+
+  var r = rollById(o.rollId);
+  var added = (o.photos || []).length;
+
+  if (r && added) {
+    r.photos = (r.photos || []).concat(o.photos);
+    r.count = r.photos.length;
+    reconcileSegs(r);
+    // 拍摄日期取最早的一张，让日历索引落在正确的位置
+    if (!r.shots || !r.shots.length) { r.shots = [todayISO()]; r.primary = todayISO(); }
+    saveDoc();
+  }
+
+  state.importProgress = null;
+  closeSheet();
+  render(true);
+
+  var msg = added ? ('已导入 ' + added + ' 张' + (o.totalBytes ? ' · ' + fmtBytes(o.totalBytes) : ''))
+                  : '没有导入任何照片';
+  if (o.cancelled && added) msg += '（已中断）';
+  if (o.failures && o.failures.length) msg += ' · ' + o.failures.length + ' 张失败';
+  toast(msg);
+  if (o.failures && o.failures.length) {
+    for (var i = 0; i < o.failures.length; i++) Native.log('warn', '导入失败：' + o.failures[i]);
+  }
+};
+
+window.__bridge.onPhotosDeleted = function(json){
+  Native.log('info', '已删除照片文件：' + json);
+};
+
+/* ============================================================
+   导出
+   ============================================================
+   合成全部在 canvas 里做，原生只负责把字节写进相册。
+   这样排版逻辑只有一份，浏览器和 App 完全一致。
+
+   注意：图片必须来自同源（https://appassets.androidplatform.net 或 blob:），
+   否则 canvas 会被污染，toDataURL() 直接抛 SecurityError。
+   这正是当初把页面从 file:// 搬到 WebViewAssetLoader 的原因之一。
+   ============================================================ */
+
+function loadPhoto(url){
+  return new Promise(function(resolve, reject){
+    if (!url) { reject(new Error('没有图片地址')); return; }
+    var img = new Image();
+    img.onload = function(){ resolve(img); };
+    img.onerror = function(){ reject(new Error('图片加载失败')); };
+    img.src = url;
+  });
+}
+
+/** 等比铺满目标框，居中裁切（等价于 CSS object-fit:cover）。 */
+function drawCover(g, img, x, y, w, h){
+  var iw = img.naturalWidth || img.width;
+  var ih = img.naturalHeight || img.height;
+  if (!iw || !ih) return;
+  var k = Math.max(w / iw, h / ih);
+  var dw = iw * k, dh = ih * k;
+  g.drawImage(img, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh);
+}
+
+function roundRect(g, x, y, w, h, r){
+  g.beginPath();
+  g.moveTo(x + r, y);
+  g.arcTo(x + w, y, x + w, y + h, r);
+  g.arcTo(x + w, y + h, x, y + h, r);
+  g.arcTo(x, y + h, x, y, r);
+  g.arcTo(x, y, x + w, y, r);
+  g.closePath();
+  g.fill();
+}
+
+function newCanvas(w, h){
+  var c = document.createElement('canvas');
+  c.width = Math.round(w);
+  c.height = Math.round(h);
+  return c;
+}
+
+/** 没有真实照片时的兜底：把合成 SVG 转成图片再画。 */
+function fallbackImage(roll, fr){
+  var svg = sceneSVG(roll.scene, fr.seed);
+  var url = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  return loadPhoto(url);
+}
+
+function frameImage(roll, fr, kind){
+  if (fr.photo) {
+    var u = Native.photoUrl(roll.id, fr.photo.id, kind || 'photos');
+    if (u) return loadPhoto(u);
+  }
+  return fallbackImage(roll, fr);
+}
+
+/* ---------- 单张水印边框 ---------- */
+
+var BORDER_STYLES = {
+  cream:    { bg: '#F3EADA', fg: '#241C14', sub: '#6B5B48', sprocket: false },
+  ink:      { bg: '#141110', fg: '#F1E7D7', sub: '#A48F76', sprocket: false },
+  sprocket: { bg: '#2E2015', fg: '#F1E7D7', sub: '#E5A03A', sprocket: true }
+};
+
+function renderBorder(roll, idx, style, img){
+  var S = BORDER_STYLES[style] || BORDER_STYLES.cream;
+  var PW = 2000, PH = 1333;                       // 画面区（3:2）
+  var PAD = S.sprocket ? 110 : 90;
+  var BAR = 180;                                   // 底部文字区
+  var W = PW + PAD * 2;
+  var H = PH + PAD + BAR;
+
+  var c = newCanvas(W, H);
+  var g = c.getContext('2d');
+
+  g.fillStyle = S.bg;
+  g.fillRect(0, 0, W, H);
+
+  if (S.sprocket) {
+    // 两侧齿孔
+    g.fillStyle = 'rgba(241,231,215,0.85)';
+    var holeW = 26, holeH = 34, gap = 46;
+    for (var y = 26; y + holeH < H - 26; y += holeH + gap) {
+      roundRect(g, 30, y, holeW, holeH, 7);
+      roundRect(g, W - 30 - holeW, y, holeW, holeH, 7);
+    }
+  }
+
+  drawCover(g, img, PAD, PAD, PW, PH);
+
+  // 画面描边，把照片和底分开
+  g.strokeStyle = S.sprocket ? 'rgba(0,0,0,.55)' : 'rgba(0,0,0,.12)';
+  g.lineWidth = 2;
+  g.strokeRect(PAD + 1, PAD + 1, PW - 2, PH - 2);
+
+  // 地点
+  var s = segOf(roll, idx);
+  var loc = s ? s.loc : '未标记地点';
+  g.fillStyle = S.fg;
+  g.textBaseline = 'alphabetic';
+  g.font = '600 62px "Noto Serif SC","Songti SC",serif';
+  g.fillText(loc, PAD, PH + PAD + 66);
+
+  // 日期 · 机身 · 胶卷
+  var parts = [fmtDate(roll.shots && roll.shots[0] ? roll.shots[0] : roll.primary)];
+  if (roll.camera) parts.push(roll.camera);
+  if (roll.film) parts.push(roll.film);
+  var line = parts.join('   ·   ');
+
+  g.fillStyle = S.sub;
+  g.font = '400 36px "Space Mono",monospace';
+  var maxW = W - PAD * 2;
+  // 太长就缩字号，不裁切
+  var fs = 36;
+  while (fs > 22 && g.measureText(line).width > maxW) {
+    fs -= 2;
+    g.font = '400 ' + fs + 'px "Space Mono",monospace';
+  }
+  g.fillText(line, PAD, PH + PAD + 126);
+
+  return c;
+}
+
+function exportBorderToAlbum(rollId, idx, style){
+  var r = rollById(rollId);
+  if (!r) return;
+  var fr = frames(r)[idx];
+  if (!fr) { toast('这一格没有画面'); return; }
+
+  toast('正在生成…');
+  frameImage(r, fr, 'photos').then(function(img){
+    var c = renderBorder(r, idx, style, img);
+    var dataUrl = c.toDataURL('image/jpeg', 0.92);
+    var name = Exporter_safeName(r.film + '_' + (fr.label || (idx + 1)) + '_' + (style || 'cream'));
+    Native.saveToAlbum(dataUrl, name);
+  }).catch(function(e){
+    Native.log('error', '边框导出失败: ' + (e && e.message));
+    toast('生成失败：' + (e && e.message));
+  });
+}
+
+function Exporter_safeName(s){
+  return String(s || 'filmbox').replace(/[\\/:*?"<>|\s]+/g, '_').slice(0, 60);
+}
+
+/* ---------- 整卷总览大图 ---------- */
+
+function renderOverview(roll, imgs){
+  var N = imgs.length;
+  if (!N) return null;
+
+  var MAXW = 6000;                                  // 画布宽度上限，防止 36 张时爆内存
+  var gap = 12;
+  var fw = Math.min(280, Math.floor((MAXW - 260 - (N - 1) * gap) / N));
+  fw = Math.max(60, fw);
+  var fh = roll.spec === '120' ? fw : Math.round(fw * 2 / 3);
+
+  var PADX = 90, PADTOP = 150, PADBOT = 150;
+  var perfH = 26;
+  var stripW = N * fw + (N - 1) * gap;
+  var W = stripW + PADX * 2;
+  var H = PADTOP + perfH + fh + perfH + 46 + PADBOT;
+
+  var c = newCanvas(W, H);
+  var g = c.getContext('2d');
+
+  // 片基
+  var grad = g.createLinearGradient(0, PADTOP, 0, PADTOP + perfH * 2 + fh);
+  grad.addColorStop(0, '#33240F');
+  grad.addColorStop(0.5, '#3A2812');
+  grad.addColorStop(1, '#33240F');
+  g.fillStyle = grad;
+  g.fillRect(PADX - 26, PADTOP, stripW + 52, perfH * 2 + fh);
+
+  // 齿孔
+  g.fillStyle = 'rgba(241,231,215,0.9)';
+  var hw = 22, hh = 14, step = 34;
+  for (var x = PADX - 26 + 14; x + hw < PADX + stripW + 26; x += step) {
+    roundRect(g, x, PADTOP + 6, hw, hh, 4);
+    roundRect(g, x, PADTOP + perfH + fh + 6, hw, hh, 4);
+  }
+
+  // 画面
+  for (var i = 0; i < N; i++) {
+    var fx = PADX + i * (fw + gap);
+    var fy = PADTOP + perfH;
+    drawCover(g, imgs[i], fx, fy, fw, fh);
+    g.strokeStyle = 'rgba(0,0,0,.5)';
+    g.lineWidth = 1;
+    g.strokeRect(fx + .5, fy + .5, fw - 1, fh - 1);
+
+    // 帧号
+    var n = roll.start + Math.floor(i / 2);
+    g.fillStyle = '#E5A03A';
+    g.font = '400 ' + Math.max(11, Math.round(fw * 0.09)) + 'px "Space Mono",monospace';
+    g.textAlign = 'center';
+    g.fillText((i % 2 === 0) ? String(n) : n + 'A', fx + fw / 2, fy + fh + perfH + 28);
+    g.textAlign = 'left';
+  }
+
+  // 片头信息
+  g.fillStyle = '#F1E7D7';
+  g.font = '600 44px "Noto Serif SC","Songti SC",serif';
+  g.fillText(roll.film || '未命名胶卷', PADX, 78);
+
+  g.fillStyle = 'rgba(241,231,215,.55)';
+  g.font = '400 26px "Space Mono",monospace';
+  var meta = [];
+  if (roll.camera) meta.push(roll.camera);
+  if (roll.lens) meta.push(roll.lens);
+  if (roll.shots && roll.shots.length) meta.push(fmtDate(roll.shots[0]) + ' 拍摄');
+  if (roll.devDate) meta.push(fmtDate(roll.devDate) + ' 冲洗');
+  g.fillText(meta.join('   ·   '), PADX, 118);
+
+  g.textAlign = 'right';
+  g.fillStyle = '#E5A03A';
+  g.font = '400 26px "Space Mono",monospace';
+  g.fillText(roll.spec + ' · ISO ' + roll.iso + ' · ' + N + ' EXP', W - PADX, 78);
+  g.textAlign = 'left';
+
+  // 页脚：分段地点
+  g.fillStyle = 'rgba(241,231,215,.5)';
+  g.font = '400 24px "Space Mono",monospace';
+  var segLine = (roll.segs || []).map(function(s){ return s.loc; }).join('  /  ');
+  g.fillText(segLine || '未分段', PADX, H - 74);
+
+  g.textAlign = 'right';
+  g.fillText('菲林档案', W - PADX, H - 74);
+  g.textAlign = 'left';
+
+  return c;
+}
+
+function exportOverviewToAlbum(rollId){
+  var r = rollById(rollId);
+  if (!r) return;
+  var fr = frames(r);
+  if (!fr.length) { toast('这一卷还没有画面'); return; }
+
+  toast('正在生成 ' + fr.length + ' 格…');
+  Promise.all(fr.map(function(f){ return frameImage(r, f, 'thumbs'); }))
+    .then(function(imgs){
+      var c = renderOverview(r, imgs);
+      if (!c) { toast('没有可导出的画面'); return; }
+      var dataUrl = c.toDataURL('image/jpeg', 0.9);
+      Native.saveToAlbum(dataUrl, Exporter_safeName(r.film + '_' + r.primary + '_总览'));
+    })
+    .catch(function(e){
+      Native.log('error', '总览导出失败: ' + (e && e.message));
+      toast('生成失败：' + (e && e.message));
+    });
+}
+
+window.__bridge.onExportDone = function(json){
+  var o = {};
+  try { o = JSON.parse(json) || {}; } catch(e){}
+  toast(o.browser ? '已下载到电脑' : '已存入相册 · Pictures/菲林档案');
+};
+window.__bridge.onExportError = function(json){
+  var o = {};
+  try { o = JSON.parse(json) || {}; } catch(e){}
+  Native.log('error', '导出失败：' + (o.message || '未知错误'));
+  toast('导出失败：' + (o.message || '未知错误'));
+};
+
+/* ============================================================
+   相机仓库：拍照 → MediaPipe 抠图
+   ============================================================ */
+
+/** 设备图：抠好的 PNG 优先，没有就退回手绘线稿。 */
+function gearImage(g){
+  if (g.photo) {
+    var url = Native.gearUrl(g.photo);
+    if (url) return '<img class="ph" src="' + esc(url) + '" alt="" loading="lazy" decoding="async">';
+  }
+  return deviceSVG(g.ill);
+}
+
+function sheetCutout(){
+  var c = state.cutout || {};
+  var src = c.resultUrl || c.sourceUrl || '';
+  return '<div class="grab"></div>' +
+    '<h3>' + (c.resultUrl ? '抠图结果' : '点一下主体') + '</h3>' +
+    '<p class="sh-sub">' + (c.resultUrl
+        ? '抠得不对？在画面上再点一下主体重新抠。'
+        : '点画面里的机身或镜头，把它从背景里抠出来。') + '</p>' +
+
+    '<div class="cutstage" id="cutstage">' +
+      (src ? '<img src="' + esc(src) + '" alt="">' : '<div class="cutempty">没有图片</div>') +
+      (c.busy ? '<div class="cutbusy">抠图中…</div>' : '') +
+    '</div>' +
+
+    (c.note ? '<p class="sh-sub" style="margin-top:12px">' + esc(c.note) + '</p>' : '') +
+
+    '<div class="sheet-actions">' +
+      '<button class="btn ghost" data-act="cutoutCancel">放弃</button>' +
+      '<button class="btn primary" data-act="cutoutSave"' +
+        (c.resultUrl ? '' : ' disabled style="opacity:.45"') + '>' +
+        I.check + '用作设备照片</button>' +
+    '</div>';
+}
+
+function onCutStageClick(ev){
+  var c = state.cutout;
+  if (!c || c.busy || c.unavailable) return;
+  var img = ev.currentTarget.querySelector('img');
+  if (!img) return;
+  var r = img.getBoundingClientRect();
+  if (!r.width || !r.height) return;
+  var x = (ev.clientX - r.left) / r.width;
+  var y = (ev.clientY - r.top) / r.height;
+  if (x < 0 || x > 1 || y < 0 || y > 1) return;
+  c.busy = true;
+  c.note = '';
+  renderSheet();
+  Native.cutoutPoint(x, y);
+}
+
+window.__bridge.onCaptureDone = function(json){
+  var o = {};
+  try { o = JSON.parse(json) || {}; } catch(e){}
+  if (o.cancelled) return;
+
+  var url = Native.captureUrl(o);
+  if (!url) { toast('拿不到照片'); return; }
+
+  state.cutout = {
+    sourcePath: o.path || '',
+    sourceUrl: url,
+    resultUrl: '',
+    outId: 'gear_' + Date.now().toString(36),
+    busy: true,
+    note: ''
+  };
+  openSheet('cutout');
+  renderSheet();
+  Native.cutoutBegin({
+    source: o.path || '',
+    workingPx: 1024,
+    outId: state.cutout.outId
+  });
+};
+
+window.__bridge.onCaptureError = function(json){
+  var o = {};
+  try { o = JSON.parse(json) || {}; } catch(e){}
+  Native.log('error', '拍照失败：' + (o.message || ''));
+  toast('拍照失败：' + (o.message || '未知错误'));
+};
+
+window.__bridge.onCutoutReady = function(json){
+  var o = {};
+  try { o = JSON.parse(json) || {}; } catch(e){}
+  if (!state.cutout) return;
+  state.cutout.busy = false;
+  state.cutout.note = '模型已就绪（' + o.w + '×' + o.h + '）。点主体开始抠。';
+  renderSheet();
+};
+
+window.__bridge.onCutoutResult = function(json){
+  var o = {};
+  try { o = JSON.parse(json) || {}; } catch(e){}
+  if (!state.cutout) return;
+  state.cutout.busy = false;
+  state.cutout.resultUrl = o.url || '';
+  state.cutout.note = '';
+  renderSheet();
+};
+
+window.__bridge.onCutoutUnavailable = function(json){
+  var o = {};
+  try { o = JSON.parse(json) || {}; } catch(e){}
+  if (!state.cutout) return;
+  state.cutout.busy = false;
+  state.cutout.unavailable = true;
+  state.cutout.note = o.reason || '抠图不可用';
+  renderSheet();
+};
+
+window.__bridge.onCutoutError = function(json){
+  var o = {};
+  try { o = JSON.parse(json) || {}; } catch(e){}
+  if (state.cutout) {
+    state.cutout.busy = false;
+    state.cutout.note = o.message || '抠图失败';
+  }
+  Native.log('error', '抠图失败：' + (o.message || ''));
+  renderSheet();
+};
+
+function sheetSettings(){
+  var paper = (SETTINGS.theme === 'paper');
+  return '<div class="grab"></div>' +
+    '<h3>设置</h3>' +
+    '<p class="sh-sub">' +
+      (APP.mode === 'native'
+        ? '菲林档案 ' + esc(APP.versionName || '') + ' · 全部数据存在本机'
+        : '浏览器原型模式 · 数据存在 localStorage') +
+    '</p>' +
+
+    '<div class="field">' +
+      '<label>主题</label>' +
+      '<div class="segctl" style="width:100%">' +
+        '<button data-act="setTheme" data-v="darkroom" aria-pressed="' + (!paper) + '" style="flex:1">暗房</button>' +
+        '<button data-act="setTheme" data-v="paper" aria-pressed="' + paper + '" style="flex:1">米色</button>' +
+      '</div>' +
+      '<div class="hint">' + I.info + '暗房＝深色底 + 琥珀橙；米色＝接触印相纸的浅色底。底片本身在两套主题下都是深色。</div>' +
+    '</div>' +
+
+    '<div class="field">' +
+      '<label>导入照片时默认</label>' +
+      '<div class="segctl" style="width:100%">' +
+        '<button data-act="setKeep" data-v="0" aria-pressed="' + (!SETTINGS.keepOriginalDefault) + '" style="flex:1">仅压缩副本</button>' +
+        '<button data-act="setKeep" data-v="1" aria-pressed="' + (!!SETTINGS.keepOriginalDefault) + '" style="flex:1">保留原片</button>' +
+      '</div>' +
+      '<div class="hint">' + I.info + '每次导入时仍可单独改。保留原片会显著占空间。</div>' +
+    '</div>' +
+
+    '<div class="exportmeta">' +
+      (APP.freeBytes ? '<span>剩余 ' + fmtBytes(APP.freeBytes) + '</span>' : '') +
+      '<span>展示副本 ' + SETTINGS.displayPx + 'px</span>' +
+      '<span>缩略图 ' + SETTINGS.thumbPx + 'px</span>' +
+      (APP.sdk ? '<span>API ' + APP.sdk + '</span>' : '') +
+      (APP.abi ? '<span>' + esc(APP.abi) + '</span>' : '') +
+    '</div>' +
+
+    '<div class="sheet-actions single">' +
+      '<button class="btn ghost" data-act="closeSheet">关闭</button>' +
+    '</div>';
+}
+
+function sheetAddGear(){
+  return '<div class="grab"></div>' +
+    '<h3>登记设备</h3>' +
+    '<p class="sh-sub">拍一张机身或镜头，点一下主体就能把背景抠掉；也可以从相册选一张现成的。</p>' +
+
+    '<div class="opts">' +
+      '<button class="opt" data-act="capture" data-purpose="gear">' +
+        '<span class="oi">' + I.spark + '</span>' +
+        '<span style="min-width:0"><span class="ot" style="display:block">直接拍照自动抠图</span>' +
+        '<span class="os" style="display:block">拍完点一下主体，自动去背景</span></span>' +
+        '<span class="oa">' + I.right + '</span></button>' +
+
+      '<button class="opt" data-act="pickPhoto" data-purpose="gear">' +
+        '<span class="oi">' + I.up + '</span>' +
+        '<span style="min-width:0"><span class="ot" style="display:block">从相册选一张</span>' +
+        '<span class="os" style="display:block">用已有的照片，同样可以抠图</span></span>' +
+        '<span class="oa">' + I.right + '</span></button>' +
+
+      '<button class="opt" data-act="manualGear">' +
+        '<span class="oi">' + I.pen + '</span>' +
+        '<span style="min-width:0"><span class="ot" style="display:block">仅手动录入信息</span>' +
+        '<span class="os" style="display:block">暂时没有照片，先登记型号与卡口</span></span>' +
+        '<span class="oa">' + I.right + '</span></button>' +
+    '</div>' +
+
+    '<p class="sh-sub" style="margin-top:18px;margin-bottom:0">' + I.info +
+      ' 抠图跑在端上（MediaPipe），不联网也不上传。背景越干净 —— 纯色桌面、白纸 —— 效果越好。</p>';
+}
+
+function sheetAddStock(){
+  return '<div class="grab"></div>' +
+    '<h3>新增库存胶卷</h3>' +
+    '<p class="sh-sub">记录数量与过期时间，列表会自动按过期时间由近到远排序。</p>' +
+    '<div class="field">' +
+      '<label for="sName">胶卷型号</label>' +
+      '<input type="text" id="sName" placeholder="自由输入，例如 Kentmere 400">' +
+    '</div>' +
+    '<div class="fieldrow">' +
+      '<div class="field"><label>规格</label>' +
+        '<div class="segctl" style="width:100%">' +
+          '<button aria-pressed="true" style="flex:1">135</button>' +
+          '<button aria-pressed="false" style="flex:1">120</button>' +
+        '</div></div>' +
+      '<div class="field"><label for="sQty">数量</label>' +
+        '<input type="text" id="sQty" value="1"></div>' +
+    '</div>' +
+    '<div class="field">' +
+      '<label for="sExp">过期时间</label>' +
+      '<input type="date" id="sExp" value="2028-06-01">' +
+      '<div class="hint">' + I.info + '过期前 90 天开始提醒，30 天内标红。</div>' +
+    '</div>' +
+    '<div class="sheet-actions">' +
+      '<button class="btn ghost" data-act="closeSheet">取消</button>' +
+      '<button class="btn primary" data-act="save" data-t="已加入胶卷仓库">' + I.check + '保存</button>' +
+    '</div>';
+}
+
+function sheetStockItem(name){
+  var s = null;
+  STOCK.forEach(function(x){ if(x.name === name) s = x; });
+  if(!s) return '';
+  var d = daysLeft(s.exp);
+  return '<div class="grab"></div>' +
+    '<h3>' + esc(s.name) + '</h3>' +
+    '<p class="sh-sub">' + s.spec + ' · ISO ' + s.iso + ' · 库存 ' + s.qty + ' 卷</p>' +
+    '<div class="metagrid">' +
+      '<div><div class="k">过期时间</div><div class="v mono">' + s.exp.replace('-','.') + '</div></div>' +
+      '<div><div class="k">剩余</div><div class="v mono">' + expWord(d) + '</div></div>' +
+      '<div><div class="k">规格</div><div class="v mono">' + s.spec + '</div></div>' +
+      '<div><div class="k">感光度</div><div class="v mono">ISO ' + s.iso + '</div></div>' +
+    '</div>' +
+    '<div class="field">' +
+      '<label for="stQty">调整数量</label>' +
+      '<input type="text" id="stQty" value="' + s.qty + '">' +
+    '</div>' +
+    '<div class="sheet-actions">' +
+      '<button class="btn ghost" data-act="closeSheet">取消</button>' +
+      '<button class="btn primary" data-act="save" data-t="库存已更新">' + I.check + '更新库存</button>' +
+    '</div>';
+}
+
+function sheetGear(id){
+  var g = null;
+  GEAR.forEach(function(x){ if(x.id === id) g = x; });
+  if(!g) return '';
+  return '<div class="grab"></div>' +
+    '<h3>' + esc(g.name) + '</h3>' +
+    '<p class="sh-sub">' + (g.sub ? esc(g.sub) + ' · ' : '') + '已拍 ' + (g.rolls || 0) + ' 卷</p>' +
+
+    '<div class="cutdemo" style="grid-template-columns:1fr">' +
+      '<figure><div class="cimg">' + gearImage(g) + '</div>' +
+      '<figcaption>' + (g.photo ? '设备照片 · 已抠图' : '还没有照片 · 暂用线稿') + '</figcaption></figure>' +
+    '</div>' +
+
+    '<div class="opts" style="margin-bottom:18px">' +
+      '<button class="opt" data-act="capture" data-purpose="gear-again" data-id="' + g.id + '">' +
+        '<span class="oi">' + I.spark + '</span>' +
+        '<span style="min-width:0"><span class="ot" style="display:block">重新拍照抠图</span></span>' +
+        '<span class="oa">' + I.right + '</span></button>' +
+      '<button class="opt" data-act="pickPhoto" data-purpose="gear-again" data-id="' + g.id + '">' +
+        '<span class="oi">' + I.up + '</span>' +
+        '<span style="min-width:0"><span class="ot" style="display:block">从相册换一张</span></span>' +
+        '<span class="oa">' + I.right + '</span></button>' +
+    '</div>' +
+
+    '<div class="field">' +
+      '<label>类型</label>' +
+      '<div class="segctl" style="width:100%">' +
+        '<button data-act="pickKind" data-v="body" aria-pressed="' + (g.kind === 'body') + '" style="flex:1">机身</button>' +
+        '<button data-act="pickKind" data-v="lens" aria-pressed="' + (g.kind === 'lens') + '" style="flex:1">镜头</button>' +
+      '</div>' +
+    '</div>' +
+    '<div class="field">' +
+      '<label for="gmName">型号</label>' +
+      '<input type="text" id="gmName" value="' + esc(g.name) + '" placeholder="自由输入，例如 Nikon FM3A">' +
+      '<div class="hint">' + I.info + '机身与镜头型号均可自由录入，不受预设限制。</div>' +
+    '</div>' +
+    '<div class="field">' +
+      '<label for="gmSub">卡口 / 规格</label>' +
+      '<input type="text" id="gmSub" value="' + esc(g.sub) + '" placeholder="例如 F 卡口 · 1989">' +
+    '</div>' +
+
+    '<div class="sheet-actions">' +
+      '<button class="btn ghost" data-act="gearDelete" data-id="' + g.id + '">删除设备</button>' +
+      '<button class="btn primary" data-act="gearSave" data-id="' + g.id + '">' + I.check + '保存</button>' +
+    '</div>';
+}
+
+/* ============================================================
+   render
+   ============================================================ */
+var screenEl = document.getElementById('screen');
+var navEl = document.getElementById('nav');
+var sheetWrap = document.getElementById('sheetwrap');
+var sheetEl = document.getElementById('sheet');
+var fabEl = document.getElementById('fab');
+
+function renderNav(){
+  navEl.innerHTML = TABS.map(function(t){
+    return '<button class="nav-b" data-act="tab" data-t="' + t.k + '" aria-current="' + (state.tab === t.k) + '">' +
+      t.icon + '<span>' + t.label + '</span></button>';
+  }).join('');
+}
+
+function render(keep){
+  var st = screenEl.scrollTop;
+  var strips = [].map.call(screenEl.querySelectorAll('.stripwrap'), function(w){ return w.scrollLeft; });
+
+  var html;
+  if(state.tab === 'film')       html = state.screen === 'roll' ? viewRoll() : viewFilmList();
+  else if(state.tab === 'cal')   html = viewCalendar();
+  else if(state.tab === 'cam')   html = viewGear();
+  else                           html = viewStock();
+  screenEl.innerHTML = html;
+
+  if(keep){
+    screenEl.scrollTop = st;
+    [].forEach.call(screenEl.querySelectorAll('.stripwrap'), function(w, i){
+      if(strips[i] != null) w.scrollLeft = strips[i];
+    });
+  } else {
+    screenEl.scrollTop = 0;
+  }
+
+  // 底片列表页也给 FAB —— 新建胶卷是导入照片的入口，没有它就没法开始
+  var showFab = (state.tab === 'cam' || state.tab === 'stock' ||
+                 (state.tab === 'film' && state.screen === 'list'));
+  fabEl.hidden = !showFab;
+  if (showFab) {
+    var fabAct, fabLabel;
+    if (state.tab === 'cam')       { fabAct = 'addGear';  fabLabel = '新增设备'; }
+    else if (state.tab === 'stock'){ fabAct = 'addStock'; fabLabel = '新增胶卷'; }
+    else                           { fabAct = 'newRoll';  fabLabel = '新建胶卷'; }
+    fabEl.innerHTML = I.plus;
+    fabEl.setAttribute('data-act', fabAct);
+    fabEl.setAttribute('aria-label', fabLabel);
+  }
+  renderNav();
+}
+
+function renderSheet(){
+  if(!state.sheet){ sheetWrap.hidden = true; sheetEl.innerHTML = ''; return; }
+  var sheetScroll = sheetEl.scrollTop;
+  var h = '';
+  switch(state.sheet){
+    case 'seg':       h = sheetSeg(state.sheetArg.roll, state.sheetArg.i); break;
+    case 'addSeg':    h = sheetAddSeg(state.sheetArg.roll); break;
+    case 'editRoll':  h = sheetEditRoll(state.sheetArg.roll); break;
+    case 'frame':     h = sheetFrame(state.sheetArg.roll, state.sheetArg.i); break;
+    case 'overview':  h = sheetOverview(state.sheetArg.roll); break;
+    case 'border':    h = sheetBorder(state.sheetArg.roll, state.sheetArg.i); break;
+    case 'addGear':   h = sheetAddGear(); break;
+    case 'addStock':  h = sheetAddStock(); break;
+    case 'stockItem': h = sheetStockItem(state.sheetArg.name); break;
+    case 'gearItem':  h = sheetGear(state.sheetArg.id); break;
+    case 'import':    h = sheetImport(state.sheetArg.roll); break;
+    case 'importing': h = sheetImporting(); break;
+    case 'cutout':    h = sheetCutout(); break;
+    case 'settings':  h = sheetSettings(); break;
+  }
+  sheetEl.innerHTML = h;
+  sheetEl.scrollTop = sheetScroll;
+  sheetWrap.hidden = false;
+
+  // 抠图工作台需要拿到点击坐标（归一化后传给原生），所以单独挂一个监听。
+  // 用委托的话拿不到相对图片的位置。
+  var stage = document.getElementById('cutstage');
+  if (stage) stage.addEventListener('click', onCutStageClick);
+}
+
+var toastTimer = null;
+function toast(msg){
+  var old = document.querySelector('.toast');
+  if(old) old.remove();
+  var el = document.createElement('div');
+  el.className = 'toast';
+  el.textContent = msg;
+  document.getElementById('phone').appendChild(el);
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function(){ el.remove(); }, 1900);
+}
+
+function openSheet(type, arg){ state.sheet = type; state.sheetArg = arg || null; renderSheet(); }
+function closeSheet(){ state.sheet = null; state.sheetArg = null; renderSheet(); }
+
+/* ============================================================
+   events
+   ============================================================ */
+document.getElementById('phone').addEventListener('click', function(e){
+  var t = e.target.closest('[data-act]');
+  if(!t) return;
+  var act = t.getAttribute('data-act');
+  var d = t.dataset;
+
+  switch(act){
+    case 'tab':
+      state.tab = d.t; state.screen = 'list'; closeSheet(); render();
+      break;
+
+    case 'mode':
+      state.listMode = d.m; render(); break;
+
+    case 'folder':
+      state.folder = d.f || null; render(); break;
+
+    case 'newFolder':
+      toast('新建文件夹 · 输入名称后可归入多卷胶卷'); break;
+
+    case 'roll':
+      state.tab = 'film'; state.screen = 'roll'; state.rollId = d.id;
+      closeSheet(); render(); break;
+
+    case 'back':
+      state.screen = 'list'; closeSheet(); render(); break;
+
+    case 'frame':
+      openSheet('frame', {roll:d.roll, i:+d.i}); break;
+
+    case 'seg':
+      if(+d.i < 0){ toast('这一格还没有所属分段'); break; }
+      openSheet('seg', {roll:d.roll, i:+d.i}); break;
+
+    case 'addSeg':
+      state.segStart = 1; openSheet('addSeg', {roll:d.roll}); break;
+
+    case 'segStart':
+      state.segStart = +d.i;
+      (function(){
+        var w = t.parentNode;
+        [].forEach.call(w.children, function(b){
+          if(b.hasAttribute && b.hasAttribute('aria-pressed')) b.setAttribute('aria-pressed', b === t);
+        });
+      })();
+      break;
+
+    case 'segPick':
+      var inp = document.getElementById('segLoc');
+      if(inp) inp.value = d.t;
+      break;
+
+    case 'segSave': {
+      var r = rollById(d.roll);
+      var v = (document.getElementById('segLoc').value || '').trim();
+      if(!v){ toast('地点不能为空'); break; }
+      r.segs[+d.i].loc = v;
+      saveDoc();
+      closeSheet(); render(true); toast('地点已更新 · ' + v);
+      break;
+    }
+
+    case 'segAdd': {
+      var r2 = rollById(d.roll);
+      var start = +d.i;
+      var loc = (document.getElementById('newSegLoc').value || '').trim();
+      if(!loc){ toast('请填写拍摄地点'); break; }
+      var prev = null;
+      r2.segs.forEach(function(s){ if(s.from < start && (!prev || s.from > prev.from)) prev = s; });
+      if(!prev){ toast('起始格需大于第 1 格'); break; }
+      prev.to = start - 1;
+      var idx = r2.segs.indexOf(prev) + 1;
+      r2.segs.splice(idx, 0, {loc:loc, from:start, to:r2.count - 1});
+      saveDoc();
+      closeSheet(); render(true); toast('已建立分段 · ' + loc);
+      break;
+    }
+
+    case 'editRoll':
+      openSheet('editRoll', {roll:d.id}); break;
+
+    case 'pickSpec':
+      state.sheetArg.spec = d.v;
+      (function(){ var w = t.parentNode; [].forEach.call(w.children, function(b){
+        b.setAttribute('aria-pressed', b === t); }); })();
+      break;
+
+    case 'pickSrc':
+      state.sheetArg.source = d.v;
+      (function(){
+        var w = t.parentNode;
+        [].forEach.call(w.children, function(b){ b.setAttribute('aria-pressed', b === t); });
+        // 来源一换，型号输入的提示语要跟着换，否则提示的是另一类设备
+        var inp = document.getElementById('fSrcModel');
+        if (inp) inp.setAttribute('placeholder',
+          d.v === 'camera' ? '例如 Sony A7R IV + 50mm 微距' : '例如 Nikon Coolscan 5000 ED');
+      })();
+      break;
+
+    case 'editSave': {
+      var rr = rollById(d.roll);
+      var a = state.sheetArg || {};
+      var gf = function(id){ var el = document.getElementById(id); return el ? el.value : ''; };
+      rr.film   = gf('fFilm').trim() || rr.film;
+      rr.camera = gf('fCam').trim() || rr.camera;
+      rr.lens   = gf('fLens').trim() || rr.lens;
+      rr.dev    = gf('fDev').trim() || rr.dev;
+      rr.sourceModel = gf('fSrcModel').trim();   // 允许留空
+      rr.iso    = parseInt(gf('fIso'), 10) || rr.iso;
+      if(a.spec) rr.spec = a.spec;
+      if(a.source) rr.source = a.source;
+      if(gf('fShot')){ rr.shots = [gf('fShot')]; rr.primary = gf('fShot'); }
+      if(gf('fDevDate')) rr.devDate = gf('fDevDate');
+      saveDoc();
+      closeSheet(); render(true); toast('胶卷信息已保存');
+      break;
+    }
+
+    case 'exportOverview':
+      openSheet('overview', {roll:d.id}); break;
+
+    case 'exportBorder':
+      state.wmStyle = 'cream';
+      openSheet('border', {roll:d.id, i:+(d.i || 0)}); break;
+
+    case 'wmstyle':
+      state.wmStyle = d.v;
+      renderSheet(); break;
+
+    case 'save':
+      closeSheet(); toast(d.t || '已保存'); break;
+
+    case 'exportAll':
+      toast('已导出全部胶卷总览 · 11 张'); break;
+
+    case 'calprev':
+      state.calM--; if(state.calM < 0){ state.calM = 11; state.calY--; }
+      state.calDay = null; render(); break;
+
+    case 'calnext':
+      state.calM++; if(state.calM > 11){ state.calM = 0; state.calY++; }
+      state.calDay = null; render(); break;
+
+    case 'calday':
+      state.calDay = (state.calDay === +d.d) ? null : +d.d; render(); break;
+
+    case 'calclear':
+      state.calDay = null; render(); break;
+
+    case 'gearkind':
+      state.gearKind = d.k; render(); break;
+
+    case 'gear':
+      openSheet('gearItem', {id:d.id}); break;
+
+    case 'addGear':
+      openSheet('addGear'); break;
+
+    // ---------- 照片导入 ----------
+
+    case 'import':
+      state.importKeep = !!SETTINGS.keepOriginalDefault;
+      openSheet('import', {roll:d.roll}); break;
+
+    case 'importKeep':
+      state.importKeep = (d.v === '1');
+      (function(){
+        var w = t.parentNode;
+        [].forEach.call(w.children, function(b){ b.setAttribute('aria-pressed', b === t); });
+        var hint = document.getElementById('keepHint');
+        if (hint) hint.textContent = keepHint(state.importKeep);
+      })();
+      break;
+
+    case 'importGo':
+      // 立刻切到进度弹窗：SAF 选择器返回之前原生不会有任何回调，
+      // 不先切的话用户点完「选择照片」看到的还是原来那个弹窗
+      state.importProgress = { done: 0, total: 0 };
+      state.sheet = 'importing';
+      state.sheetArg = { roll: d.roll };
+      renderSheet();
+      Native.importPhotos({
+        rollId: d.roll,
+        keepOriginal: !!state.importKeep,
+        displayPx: SETTINGS.displayPx,
+        thumbPx: SETTINGS.thumbPx,
+        quality: SETTINGS.quality
+      });
+      break;
+
+    case 'importCancel':
+      Native.cancelImport(); break;
+
+    // ---------- 导出到相册 ----------
+
+    case 'exportOverviewGo':
+      closeSheet();
+      exportOverviewToAlbum(d.roll);
+      break;
+
+    case 'exportBorderGo':
+      closeSheet();
+      exportBorderToAlbum(d.roll, +d.i, state.wmStyle);
+      break;
+
+    // ---------- 拍照 ----------
+
+    case 'capture':
+      state.cutoutTarget = d.id || '';
+      Native.capturePhoto(d.purpose || '');
+      break;
+
+    case 'pickPhoto':
+      state.cutoutTarget = d.id || '';
+      Native.pickPhoto(d.purpose || '');
+      break;
+
+    case 'pickKind':
+      state.sheetArg.kind = d.v;
+      (function(){ var w = t.parentNode; [].forEach.call(w.children, function(b){
+        b.setAttribute('aria-pressed', b === t); }); })();
+      break;
+
+    case 'gearSave': {
+      var gg = null;
+      GEAR.forEach(function(x){ if (x.id === d.id) gg = x; });
+      if (!gg) break;
+      var nEl = document.getElementById('gmName');
+      var sEl = document.getElementById('gmSub');
+      if (nEl && nEl.value.trim()) gg.name = nEl.value.trim();
+      if (sEl) gg.sub = sEl.value.trim();
+      if (state.sheetArg && state.sheetArg.kind) gg.kind = state.sheetArg.kind;
+      saveDoc();
+      closeSheet();
+      render(true);
+      toast('设备信息已保存');
+      break;
+    }
+
+    case 'gearDelete': {
+      var di = -1;
+      for (var gi = 0; gi < GEAR.length; gi++) if (GEAR[gi].id === d.id) di = gi;
+      if (di < 0) break;
+      var removed = GEAR.splice(di, 1)[0];
+      saveDoc();
+      closeSheet();
+      render(true);
+      toast('已删除 ' + (removed.name || '设备'));
+      break;
+    }
+
+    case 'manualGear': {
+      var mgid = 'g' + Date.now().toString(36);
+      GEAR.unshift({
+        id: mgid, kind: 'body', name: '新设备', sub: '',
+        rolls: 0, ill: 'slr', photo: null
+      });
+      saveDoc();
+      closeSheet();
+      render(true);
+      openSheet('gearItem', {id: mgid});
+      break;
+    }
+
+    case 'cutoutSave': {
+      var cc = state.cutout || {};
+      var tid = state.cutoutTarget || '';
+      var tg = null;
+      if (tid) GEAR.forEach(function(x){ if (x.id === tid) tg = x; });
+
+      if (tg) {
+        // 给已有设备换照片
+        if (cc.resultUrl) tg.photo = cc.outId + '.png';
+      } else {
+        tid = 'g' + Date.now().toString(36);
+        GEAR.unshift({
+          id: tid, kind: 'body', name: '新设备', sub: '',
+          rolls: 0, ill: 'slr',
+          photo: cc.resultUrl ? (cc.outId + '.png') : null
+        });
+      }
+
+      Native.cutoutEnd();
+      state.cutout = null;
+      state.cutoutTarget = '';
+      closeSheet();
+      saveDoc();
+      render(true);
+      // 建完/换完直接推编辑窗，让用户补型号和卡口
+      openSheet('gearItem', {id: tid});
+      break;
+    }
+
+    case 'settings':
+      openSheet('settings'); break;
+
+    case 'setTheme':
+      applyTheme(d.v);
+      saveDoc();
+      renderSheet();
+      break;
+
+    case 'setKeep':
+      SETTINGS.keepOriginalDefault = (d.v === '1');
+      saveDoc();
+      renderSheet();
+      break;
+
+    case 'cutoutCancel':
+      Native.cutoutEnd();
+      state.cutout = null;
+      closeSheet();
+      break;
+
+    case 'newRoll': {
+      var nid = 'r' + Date.now().toString(36);
+      var today = todayISO();
+      ROLLS.unshift({
+        id: nid, film: '未命名胶卷', stock: '', spec: '135', iso: 400, scene: 'coast',
+        camera: '', lens: '', dev: '', devDate: '',
+        source: 'scanner', sourceModel: '',
+        primary: today, shots: [today], start: 1, count: 0,
+        folder: null, segs: [], photos: []
+      });
+      saveDoc();
+      state.tab = 'film'; state.screen = 'roll'; state.rollId = nid;
+      render();
+      // 新建之后第一件事就是补信息，直接把编辑弹窗推上去
+      openSheet('editRoll', {roll: nid});
+      break;
+    }
+
+    case 'addStock':
+      openSheet('addStock'); break;
+
+    case 'stock':
+      openSheet('stockItem', {name:d.n}); break;
+
+    case 'closeSheet':
+      closeSheet(); break;
+  }
+});
+
+document.addEventListener('keydown', function(e){
+  if(e.key === 'Escape' && state.sheet) closeSheet();
+});
+
+/* ============================================================
+   持久化
+   ============================================================
+   文档模型：一份 JSON，照片元数据内嵌在各自的 roll 里。
+   一卷是天然的聚合边界（底片条一次渲染整卷），内嵌能让 docSave 保持
+   单次原子写。36 张的元数据约 10KB，二十卷也就 200KB。
+   ============================================================ */
+var SETTINGS = {
+  theme:'darkroom',          // darkroom | paper
+  keepOriginalDefault:false, // 导入时是否默认保留原片
+  displayPx:2048,            // 展示副本长边
+  thumbPx:360,               // 缩略图长边
+  quality:85
+};
+var APP = { mode:'browser', versionName:'?' };
+
+function serialize(){
+  return {
+    schema: 2,
+    updatedAt: new Date().toISOString(),
+    settings: SETTINGS,
+    rolls: ROLLS,
+    gear: GEAR,
+    stock: STOCK,
+    folders: FOLDERS
+  };
+}
+
+/** 用文档覆盖内存里的数组。返回 false 表示没有文档（首次运行）。 */
+function hydrate(doc){
+  if (!doc || typeof doc !== 'object') return false;
+  if (doc.rolls)   ROLLS   = doc.rolls;
+  if (doc.gear)    GEAR    = doc.gear;
+  if (doc.stock)   STOCK   = doc.stock;
+  if (doc.folders) FOLDERS = doc.folders;
+  if (doc.settings) {
+    for (var k in doc.settings) {
+      if (Object.prototype.hasOwnProperty.call(doc.settings, k)) SETTINGS[k] = doc.settings[k];
+    }
+  }
+
+  // 迁移：早期版本把「相机翻拍」记成 'phone'。不迁移的话这些卷会掉进
+  // srcLabel 的 else 分支显示成「扫描仪」—— 数据没错，但显示是错的。
+  // 幂等，每次载入跑一遍即可。
+  for (var i = 0; i < ROLLS.length; i++) {
+    if (ROLLS[i].source === 'phone') ROLLS[i].source = 'camera';
+  }
+  return true;
+}
+
+/* JS 侧再合并一次连点：一次交互序列只过一次桥。
+   原生侧还有 500ms 防抖，两层加起来写入次数是个位数。 */
+var _saveTimer = null;
+function saveDoc(){
+  if (_saveTimer) clearTimeout(_saveTimer);
+  _saveTimer = setTimeout(function(){
+    _saveTimer = null;
+    try {
+      Native.docSave(serialize());
+    } catch(e) {
+      Native.log('error', 'docSave 失败: ' + (e && e.message));
+    }
+  }, 300);
+}
+
+function applyTheme(t){
+  SETTINGS.theme = (t === 'paper') ? 'paper' : 'darkroom';
+  document.documentElement.setAttribute('data-theme', SETTINGS.theme);
+  try { Native.setTheme(SETTINGS.theme); } catch(e){}
+  var m = document.querySelector('meta[name="theme-color"]');
+  if (m) m.setAttribute('content', SETTINGS.theme === 'paper' ? '#EFE6D6' : '#15110D');
+}
+
+/* ============================================================
+   启动
+   ============================================================ */
+(function boot(){
+  // 错误先接住。这个项目的失败模式全是静默的 —— 字体回退、资源找不到、
+  // 桥调用失败，都不会有可见反馈。没有这个，调试只能靠猜。
+  window.addEventListener('error', function(ev){
+    Native.log('error', (ev.message || 'error') + ' @' +
+      String(ev.filename || '?').split('/').pop() + ':' + (ev.lineno || 0));
+  });
+  window.addEventListener('unhandledrejection', function(ev){
+    Native.log('error', 'unhandledrejection: ' + ev.reason);
+  });
+
+  try { APP = Native.appInfo(); } catch(e){}
+
+  var doc = null;
+  try { doc = Native.docLoad(); }
+  catch(e){ Native.log('error', 'docLoad 失败: ' + e.message); }
+
+  if (hydrate(doc)) {
+    Native.log('info', '载入 ' + ROLLS.length + ' 卷 / ' + GEAR.length + ' 器材 / ' + STOCK.length + ' 款胶卷');
+  } else {
+    // 首次运行：现有字面量就是种子，存一次即成为真实数据。
+    // 不需要迁移脚本 —— 演示数据直接变成用户数据。
+    Native.log('info', '首次运行，写入种子数据');
+    saveDoc();
+  }
+
+  applyTheme(SETTINGS.theme || Native.savedTheme() || 'darkroom');
+  render();
+
+  // 字体到底加载上没有 —— 静默回退看起来很正常，只有查 API 才知道。
+  // 这条日志是 M0 验收条件之一，必须在 logcat 里能看到明确结论。
+  if (document.fonts && document.fonts.ready && document.fonts.check) {
+    document.fonts.ready.then(function(){
+      var ok = false;
+      try { ok = document.fonts.check('12px "Space Mono"'); } catch(e){}
+      Native.log(ok ? 'info' : 'error',
+        'Space Mono 加载: ' + (ok ? '成功' : '失败 —— 已回退系统等宽字体'));
+    });
+  }
+})();
+})();
+</script>

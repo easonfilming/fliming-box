@@ -1,0 +1,27 @@
+# 工具链（约 1.5 GB，用 setup_toolchain.ps1 重建）
+/toolchain/
+
+# Gradle 缓存与构建产物
+/.gradle/
+/.gradle-home/
+/app/build/
+/build/
+/out/
+
+# 签名密钥。构建脚本在缺失时会自动生成一把，所以不入库。
+/demo.keystore
+
+# 生成的 assets。build_assets.py 会重新生成：
+#   index.html        从 prototype/film-archive-app.html 转换
+#   spacemono-*.woff2 从 Google Fonts 拉
+#   magic_touch.tflite 从 mediapipe-models 拉（5.9 MB，不入库）
+/app/src/main/assets/
+
+# Python
+__pycache__/
+*.pyc
+
+# 系统
+Thumbs.db
+.DS_Store
+desktop.ini

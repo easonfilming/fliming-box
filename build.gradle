@@ -1,0 +1,29 @@
+// 菲林档案 —— 顶层构建脚本
+//
+// 依赖全部走阿里云镜像：sdkmanager 没有镜像支持，会直接去 dl.google.com，
+// 所以这里必须保证 Gradle 阶段一个包都不从 Google 的网络拉。
+// 已验证 tasks-vision / tasks-core / androidx.webkit / androidx.core /
+// datatransport / flogger / protobuf 都能从这两个仓库解析到。
+//
+// 用经典 buildscript + allprojects 写法，不用 plugins {} —— 后者会去
+// plugins.gradle.org 解析插件标记，多一个不必要的网络依赖。
+
+buildscript {
+    repositories {
+        maven { url 'https://maven.aliyun.com/repository/google' }
+        maven { url 'https://maven.aliyun.com/repository/central' }
+        maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }
+    }
+    dependencies {
+        // 钉死 8.7.3：它是最后一个只要求 build-tools 34.0.0 的版本。
+        // 8.13+ 要 35.0.0、9.x 要 36.0.0，而 sdkmanager 只能去 dl.google.com 下。
+        classpath 'com.android.tools.build:gradle:8.7.3'
+    }
+}
+
+allprojects {
+    repositories {
+        maven { url 'https://maven.aliyun.com/repository/google' }
+        maven { url 'https://maven.aliyun.com/repository/central' }
+    }
+}

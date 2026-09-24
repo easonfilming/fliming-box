@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- API 24–25 的启动图标（26+ 由 mipmap-anydpi-v26 的自适应图标接管） -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <path android:fillColor="#15110D" android:pathData="M0,0h108v108h-108z" />
+    <path android:fillColor="#E5A03A" android:pathData="M14,34h80v40h-80z" />
+    <path android:fillColor="#2E2015" android:pathData="M22,43h64v22h-64z" />
+    <path android:fillColor="#15110D"
+        android:pathData="M18,36.6h5.5v4.4h-5.5zM29,36.6h5.5v4.4h-5.5zM40,36.6h5.5v4.4h-5.5zM51,36.6h5.5v4.4h-5.5zM62,36.6h5.5v4.4h-5.5zM73,36.6h5.5v4.4h-5.5zM84,36.6h5.5v4.4h-5.5z" />
+    <path android:fillColor="#15110D"
+        android:pathData="M18,67h5.5v4.4h-5.5zM29,67h5.5v4.4h-5.5zM40,67h5.5v4.4h-5.5zM51,67h5.5v4.4h-5.5zM62,67h5.5v4.4h-5.5zM73,67h5.5v4.4h-5.5zM84,67h5.5v4.4h-5.5z" />
+</vector>

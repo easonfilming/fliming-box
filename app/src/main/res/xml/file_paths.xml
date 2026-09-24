@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  FileProvider 的可见范围。只暴露 tmp/ —— 相机应用只需要往这里写一张照片，
+  没必要让它看到照片库或原始文件。
+-->
+<paths>
+    <files-path name="tmp" path="tmp/" />
+</paths>
