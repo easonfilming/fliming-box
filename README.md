@@ -4,6 +4,14 @@
 
 纯个人档案工具 —— **没有社交，不做滤镜调色，不联网**。
 
+## 下载
+
+**[⬇ 下载 APK](https://github.com/easonfilming/fliming-box/releases/latest)**（约 25 MB）
+
+传到手机上点开安装，允许「安装未知来源应用」。需要 **Android 10 或更高**，**arm64** 机型。
+
+自签名包，没上应用商店，所以系统会提示未知来源 —— 这是正常的。安装包的 SHA-256 和签名指纹在每个 release 的说明里，可以核对。
+
 <p align="center">
   <img src="docs/01-film-dark.jpg" width="30%">
   <img src="docs/02-film-paper.jpg" width="30%">
