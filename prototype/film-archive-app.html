@@ -2539,6 +2539,10 @@ function loadSamples(){
     if (r.folder && FOLDERS.indexOf(r.folder) < 0) FOLDERS.push(r.folder);
   });
   FOLDERS.sort();
+  // 示例数据里没有 id，补上 —— 库存条目现在按 id 查
+  STOCK.forEach(function(x, i){
+    if (!x.id) x.id = 's' + i + '_' + Date.now().toString(36);
+  });
 }
 
 var TODAY = new Date(2026, 8, 24);
@@ -2880,6 +2884,13 @@ function viewFilmList(){
       '导入一卷底片，它会拼成一整张长条，可以横向拖动、分段标记拍摄地点。',
       '所有数据都留在这台设备上，不联网。'
     ], '新建第一卷', 'newRoll');
+  } else if (!list.length) {
+    // 有胶卷，但当前筛选下没有 —— 比如刚建好还没放东西的空文件夹。
+    // 不处理的话这里是一片纯黑，看起来像坏了。
+    body = emptyState('这个文件夹还是空的', [
+      '打开任意一卷，在「编辑胶卷信息」里把它归入这个文件夹。',
+      '一卷只能属于一个文件夹。'
+    ], null, null);
   }
 
   var chips = '<button class="chip" data-act="folder" data-f="" aria-pressed="' + (state.folder === null) + '">全部</button>' +
@@ -2887,7 +2898,8 @@ function viewFilmList(){
       return '<button class="chip" data-act="folder" data-f="' + esc(f) + '" aria-pressed="' + (state.folder === f) + '">' +
         I.folder + esc(f) + '</button>';
     }).join('') +
-    '<button class="chip" data-act="newFolder">' + I.plus + '新建文件夹</button>';
+    '<button class="chip" data-act="newFolder">' + I.plus + '新建文件夹</button>' +
+    (state.folder ? '<button class="chip" data-act="folderManage">' + I.more + '管理</button>' : '');
 
   return '<div class="hd">' +
       '<div><h2>底片</h2><div class="sub">' + ROLLS.length + ' 卷 · ' + FOLDERS.length + ' 个文件夹</div></div>' +
@@ -3129,6 +3141,10 @@ function viewGear(){
 function viewStock(){
   var total = STOCK.reduce(function(a,s){ return a + s.qty; }, 0);
   var urgent = STOCK.filter(function(s){ return daysLeft(s.exp) <= 90; }).length;
+  // 同一款胶卷可能有多个批次（不同过期时间），款数要按型号去重
+  var kinds = {};
+  STOCK.forEach(function(s){ kinds[s.name + '|' + s.spec] = 1; });
+  var kindCount = Object.keys(kinds).length;
   var sorted = STOCK.slice().sort(function(a,b){ return a.exp.localeCompare(b.exp); });
   var maxD = Math.max.apply(null, sorted.map(function(s){ return Math.max(1, daysLeft(s.exp)); }));
 
@@ -3136,7 +3152,7 @@ function viewStock(){
     var d = daysLeft(s.exp);
     var lvl = expLevel(d);
     var w = Math.max(3, Math.round(Math.min(1, d/maxD) * 100));
-    return '<button class="stockrow ' + (lvl === 'u' ? 'urgent' : lvl === 's' ? 'soon' : '') + '" data-act="stock" data-n="' + esc(s.name) + '">' +
+    return '<button class="stockrow ' + (lvl === 'u' ? 'urgent' : lvl === 's' ? 'soon' : '') + '" data-act="stock" data-id="' + esc(s.id) + '">' +
       '<span class="sr-top">' +
         '<span class="sr-name">' + esc(s.name) + '</span>' +
         '<span class="specbadge" style="margin-left:0">' + s.spec + '</span>' +
@@ -3153,12 +3169,14 @@ function viewStock(){
   }).join('');
 
   return '<div class="hd"><div><h2>胶卷仓库</h2>' +
-      '<div class="sub">库存 ' + total + ' 卷 · ' + STOCK.length + ' 款</div></div>' +
+      '<div class="sub">库存 ' + total + ' 卷 · ' + kindCount + ' 款 · ' +
+        STOCK.length + ' 批</div></div>' +
       '<button class="iconbtn" data-act="addStock" aria-label="新增胶卷">' + I.plus + '</button>' +
     '</div>' +
     '<div class="stockstats">' +
       '<div><div class="k">现有库存</div><div class="v">' + total + '</div></div>' +
-      '<div><div class="k">胶卷款数</div><div class="v">' + STOCK.length + '</div></div>' +
+      '<div><div class="k">款数 / 批次</div><div class="v">' + kindCount +
+        '<u>/ ' + STOCK.length + '</u></div></div>' +
       '<div class="warn"><div class="k">临近过期</div><div class="v">' + urgent + '</div></div>' +
     '</div>' +
     '<div class="sorthint">' + I.sortup + '按过期时间由近到远 · 临近过期优先展示</div>' +
@@ -3344,6 +3362,18 @@ function sheetEditRoll(rollId){
       '<label for="fLens">镜头</label>' +
       '<input type="text" id="fLens" value="' + esc(r.lens) + '">' +
     '</div>' +
+    '<div class="field">' +
+      '<label>归入文件夹</label>' +
+      '<div class="chiprow">' +
+        '<button class="chip" data-act="pickFolder" data-f="" aria-pressed="' + (!r.folder) + '">不归入</button>' +
+        FOLDERS.map(function(f){
+          return '<button class="chip" data-act="pickFolder" data-f="' + esc(f) + '" aria-pressed="' +
+            (r.folder === f) + '">' + I.folder + esc(f) + '</button>';
+        }).join('') +
+        '<button class="chip" data-act="newFolderFromRoll">' + I.plus + '新建</button>' +
+      '</div>' +
+    '</div>' +
+
     '<div class="field">' +
       '<label>导入来源</label>' +
       '<div class="segctl" style="width:100%">' +
@@ -4094,6 +4124,39 @@ function sheetWipe(){
     '</div>';
 }
 
+function sheetNewFolder(){
+  return '<div class="grab"></div>' +
+    '<h3>新建文件夹</h3>' +
+    '<p class="sh-sub">文件夹用来把多卷不同的胶卷归到一起 —— 一次旅行、一个长期项目、或者同一台机器的所有片子。</p>' +
+    '<div class="field">' +
+      '<label for="nfName">文件夹名称</label>' +
+      '<input type="text" id="nfName" placeholder="例如 2026 春 · 青岛">' +
+      '<div class="hint">' + I.info + '自由输入，不受任何预设限制。</div>' +
+    '</div>' +
+    '<div class="sheet-actions">' +
+      '<button class="btn ghost" data-act="closeSheet">取消</button>' +
+      '<button class="btn primary" data-act="folderCreate">' + I.check + '创建</button>' +
+    '</div>';
+}
+
+function sheetFolderManage(name){
+  var n = 0;
+  ROLLS.forEach(function(r){ if (r.folder === name) n++; });
+  return '<div class="grab"></div>' +
+    '<h3>' + esc(name) + '</h3>' +
+    '<p class="sh-sub">这个文件夹里有 ' + n + ' 卷。</p>' +
+    '<div class="field">' +
+      '<label for="fmName">改名</label>' +
+      '<input type="text" id="fmName" value="' + esc(name) + '">' +
+    '</div>' +
+    '<div class="sheet-actions">' +
+      '<button class="btn ghost" data-act="folderDelete">删除文件夹</button>' +
+      '<button class="btn primary" data-act="folderRename">' + I.check + '保存名称</button>' +
+    '</div>' +
+    '<p class="sh-sub" style="margin-top:14px;margin-bottom:0">' +
+      I.info + ' 删除文件夹不会删掉里面的胶卷，它们只是不再归入文件夹。</p>';
+}
+
 function sheetAddGear(){
   return '<div class="grab"></div>' +
     '<h3>登记设备</h3>' +
@@ -4163,9 +4226,9 @@ function defaultExp(){
     ('0' + d.getDate()).slice(-2);
 }
 
-function sheetStockItem(name){
+function sheetStockItem(id){
   var s = null;
-  STOCK.forEach(function(x){ if(x.name === name) s = x; });
+  STOCK.forEach(function(x){ if(x.id === id) s = x; });
   if(!s) return '';
   var d = daysLeft(s.exp);
   return '<div class="grab"></div>' +
@@ -4182,8 +4245,9 @@ function sheetStockItem(name){
       '<input type="text" id="stQty" value="' + s.qty + '">' +
     '</div>' +
     '<div class="sheet-actions">' +
-      '<button class="btn ghost" data-act="closeSheet">取消</button>' +
-      '<button class="btn primary" data-act="save" data-t="库存已更新">' + I.check + '更新库存</button>' +
+      '<button class="btn ghost" data-act="stockDelete" data-id="' + esc(s.id) + '">删除这批</button>' +
+      '<button class="btn primary" data-act="stockUpdate" data-id="' + esc(s.id) + '">' +
+        I.check + '更新数量</button>' +
     '</div>';
 }
 
@@ -4300,13 +4364,15 @@ function renderSheet(){
     case 'border':    h = sheetBorder(state.sheetArg.roll, state.sheetArg.i); break;
     case 'addGear':   h = sheetAddGear(); break;
     case 'addStock':  h = sheetAddStock(); break;
-    case 'stockItem': h = sheetStockItem(state.sheetArg.name); break;
+    case 'stockItem': h = sheetStockItem(state.sheetArg.id); break;
     case 'gearItem':  h = sheetGear(state.sheetArg.id); break;
     case 'import':    h = sheetImport(state.sheetArg.roll); break;
     case 'importing': h = sheetImporting(); break;
     case 'settings':  h = sheetSettings(); break;
     case 'illus':     h = sheetIllus(state.sheetArg.id); break;
     case 'wipe':      h = sheetWipe(); break;
+    case 'newFolder': h = sheetNewFolder(); break;
+    case 'folderManage': h = sheetFolderManage(state.sheetArg.name); break;
   }
   sheetEl.innerHTML = h;
   sheetEl.scrollTop = sheetScroll;
@@ -4350,7 +4416,73 @@ document.getElementById('phone').addEventListener('click', function(e){
       state.folder = d.f || null; render(); break;
 
     case 'newFolder':
-      toast('新建文件夹 · 输入名称后可归入多卷胶卷'); break;
+    case 'newFolderFromRoll':
+      openSheet('newFolder'); break;
+
+    case 'folderCreate': {
+      var nfEl = document.getElementById('nfName');
+      var nf = nfEl ? String(nfEl.value || '').trim() : '';
+      if (!nf) { toast('请输入文件夹名称'); break; }
+      if (FOLDERS.indexOf(nf) >= 0) { toast('已经有同名文件夹了'); break; }
+      FOLDERS.push(nf);
+      FOLDERS.sort();
+      state.folder = nf;                 // 建完直接切过去，省一步
+      saveDoc();
+      closeSheet();
+      render();
+      toast('已创建「' + nf + '」');
+      break;
+    }
+
+    case 'pickFolder':
+      if (!state.sheetArg) state.sheetArg = {};
+      state.sheetArg.folder = d.f || null;
+      (function(){
+        var w = t.parentNode;
+        [].forEach.call(w.children, function(b){
+          if (b.hasAttribute('data-f')) {
+            b.setAttribute('aria-pressed', (b.getAttribute('data-f') || null) === (d.f || null));
+          }
+        });
+      })();
+      break;
+
+    case 'folderManage':
+      openSheet('folderManage', {name: state.folder});
+      break;
+
+    case 'folderRename': {
+      var fmEl = document.getElementById('fmName');
+      var newName = fmEl ? String(fmEl.value || '').trim() : '';
+      var oldName = state.sheetArg ? state.sheetArg.name : '';
+      if (!newName) { toast('名称不能为空'); break; }
+      if (newName !== oldName && FOLDERS.indexOf(newName) >= 0) { toast('已经有同名文件夹了'); break; }
+      var fi = FOLDERS.indexOf(oldName);
+      if (fi >= 0) FOLDERS[fi] = newName;
+      ROLLS.forEach(function(r){ if (r.folder === oldName) r.folder = newName; });
+      if (state.folder === oldName) state.folder = newName;
+      FOLDERS.sort();
+      saveDoc();
+      closeSheet();
+      render();
+      toast('已改名为「' + newName + '」');
+      break;
+    }
+
+    case 'folderDelete': {
+      var dn = state.sheetArg ? state.sheetArg.name : '';
+      var di = FOLDERS.indexOf(dn);
+      if (di >= 0) FOLDERS.splice(di, 1);
+      // 卷不删，只是不再归入文件夹
+      var moved = 0;
+      ROLLS.forEach(function(r){ if (r.folder === dn) { r.folder = null; moved++; } });
+      if (state.folder === dn) state.folder = null;
+      saveDoc();
+      closeSheet();
+      render();
+      toast('已删除文件夹，' + moved + ' 卷已移出');
+      break;
+    }
 
     case 'roll':
       state.tab = 'film'; state.screen = 'roll'; state.rollId = d.id;
@@ -4410,8 +4542,11 @@ document.getElementById('phone').addEventListener('click', function(e){
       break;
     }
 
-    case 'editRoll':
-      openSheet('editRoll', {roll:d.id}); break;
+    case 'editRoll': {
+      var er = rollById(d.id);
+      openSheet('editRoll', {roll: d.id, folder: er ? (er.folder || null) : null});
+      break;
+    }
 
     case 'pickSpec':
       state.sheetArg.spec = d.v;
@@ -4445,6 +4580,13 @@ document.getElementById('phone').addEventListener('click', function(e){
       if(a.source) rr.source = a.source;
       if(gf('fShot')){ rr.shots = [gf('fShot')]; rr.primary = gf('fShot'); }
       if(gf('fDevDate')) rr.devDate = gf('fDevDate');
+      if (state.sheetArg && 'folder' in state.sheetArg) rr.folder = state.sheetArg.folder;
+      // 文件夹可能是从这儿改的，筛选列表要跟着更新
+      FOLDERS = [];
+      ROLLS.forEach(function(r){
+        if (r.folder && FOLDERS.indexOf(r.folder) < 0) FOLDERS.push(r.folder);
+      });
+      FOLDERS.sort();
       saveDoc();
       closeSheet(); render(true); toast('胶卷信息已保存');
       break;
@@ -4627,7 +4769,36 @@ document.getElementById('phone').addEventListener('click', function(e){
       openSheet('addStock', {}); break;
 
     case 'stock':
-      openSheet('stockItem', {name:d.n}); break;
+      openSheet('stockItem', {id:d.id}); break;
+
+    case 'stockUpdate': {
+      var stu = null;
+      STOCK.forEach(function(x){ if (x.id === d.id) stu = x; });
+      if (!stu) break;
+      var qEl = document.getElementById('stQty');
+      var q = parseInt(qEl ? qEl.value : '', 10);
+      if (!q || q < 1) { toast('数量至少为 1'); break; }
+      stu.qty = q;
+      saveDoc();
+      closeSheet();
+      render(true);
+      toast('已更新为 ' + q + ' 卷');
+      break;
+    }
+
+    case 'stockDelete': {
+      var sdi = -1;
+      for (var qi = 0; qi < STOCK.length; qi++) {
+        if (STOCK[qi].id === d.id) sdi = qi;
+      }
+      if (sdi < 0) break;
+      var srm = STOCK.splice(sdi, 1)[0];
+      saveDoc();
+      closeSheet();
+      render(true);
+      toast('已删除 ' + srm.name + '（' + srm.exp.replace('-', '.') + ' 到期）');
+      break;
+    }
 
     case 'settings':
       openSheet('settings'); break;
@@ -4734,18 +4905,24 @@ document.getElementById('phone').addEventListener('click', function(e){
       var sp = (state.sheetArg && state.sheetArg.spec) || '135';
       var iso = (state.sheetArg && state.sheetArg.iso) || 400;
 
-      // 同型号同规格就累加数量、取更早的过期时间 ——
-      // 库存列表里不该出现两条一模一样的
+      // 只有「型号 + 规格 + 过期时间」三者全一样才累加。
+      //
+      // 过期时间是批次标识：同一款胶卷不同批次（2023 年买的一批 2026 到期、
+      // 2025 年又买一批 2028 到期）必须分开显示 —— 合并了就看不出哪批该先用。
       var found = null;
       for (var si = 0; si < STOCK.length; si++) {
-        if (STOCK[si].name === nm && STOCK[si].spec === sp) { found = STOCK[si]; break; }
+        if (STOCK[si].name === nm && STOCK[si].spec === sp && STOCK[si].exp === exp) {
+          found = STOCK[si]; break;
+        }
       }
       if (found) {
         found.qty += qty;
-        if (exp < found.exp) found.exp = exp;
-        toast('已累加 ' + qty + ' 卷 · ' + nm);
+        toast('已累加 ' + qty + ' 卷 · ' + nm + '（' + exp.replace('-', '.') + ' 到期）');
       } else {
-        STOCK.push({ name: nm, spec: sp, iso: iso, qty: qty, exp: exp });
+        STOCK.push({
+          id: 's' + Date.now().toString(36) + Math.floor(Math.random() * 1000),
+          name: nm, spec: sp, iso: iso, qty: qty, exp: exp
+        });
         toast('已加入 ' + nm + ' ×' + qty);
       }
       saveDoc();
@@ -4809,6 +4986,12 @@ function hydrate(doc){
   // 幂等，每次载入跑一遍即可。
   for (var i = 0; i < ROLLS.length; i++) {
     if (ROLLS[i].source === 'phone') ROLLS[i].source = 'camera';
+  }
+
+  // 库存条目早先没有 id（那时按型号查，同型号只能有一条）。补上，
+  // 否则同一款胶卷的不同批次点进去会永远打开第一条。
+  for (var k = 0; k < STOCK.length; k++) {
+    if (!STOCK[k].id) STOCK[k].id = 's' + k + '_' + Date.now().toString(36);
   }
   return true;
 }

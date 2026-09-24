@@ -237,7 +237,9 @@ def main():
 
     os.makedirs(ASSETS, exist_ok=True)
     dst = os.path.join(ASSETS, 'index.html')
-    io.open(dst, 'w', encoding='utf-8').write(out)
+    # 显式写 LF：文本模式在 Windows 上会把换行转成 CRLF，那样同一份内容
+    # 在 APK 里和磁盘上字节数不同，排查差异时白费功夫。
+    io.open(dst, 'w', encoding='utf-8', newline='\n').write(out)
     print('  wrote   %s  (%.1f KB)' % (dst, len(out.encode('utf-8')) / 1024.0))
 
 
