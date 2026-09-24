@@ -359,6 +359,7 @@ h1{
 .segctl button[aria-pressed="true"]{background:var(--am);color:#1A1208;font-weight:500}
 .segctl button:focus-visible{outline:2px solid var(--am);outline-offset:-2px}
 
+.field .chiprow{padding:0;margin:0}
 .chiprow{
   display:flex;
   gap:7px;
@@ -1456,6 +1457,44 @@ h1{
   color:var(--tx3);
   padding:7px 9px;
   border-top:1px solid var(--bd);
+  text-align:center;
+}
+
+/* 线稿选择器 */
+.illusgrid{
+  display:grid;
+  grid-template-columns:repeat(3, minmax(0,1fr));
+  gap:10px;
+}
+.illuscard{
+  background:var(--card);
+  border:1px solid var(--bd);
+  border-radius:12px;
+  padding:0;
+  overflow:hidden;
+  cursor:pointer;
+  font-family:inherit;
+  color:inherit;
+  display:flex;
+  flex-direction:column;
+  transition:border-color .15s;
+}
+.illuscard:hover{border-color:var(--am)}
+.illuscard:focus-visible{outline:2px solid var(--am);outline-offset:2px}
+.illusart{
+  display:grid;
+  place-items:center;
+  aspect-ratio:1/.92;
+  background:
+    radial-gradient(62% 52% at 50% 46%, rgba(229,160,58,.14), transparent 72%),
+    #191410;
+  border-bottom:1px solid var(--bd);
+}
+.illusart svg{width:72%;height:72%;max-width:100%;display:block;overflow:visible}
+.illusname{
+  font-size:11.5px;
+  color:var(--tx2);
+  padding:8px 4px 9px;
   text-align:center;
 }
 
@@ -2594,8 +2633,16 @@ function deviceSVG(kind){
     s += '<circle cx="60" cy="80" r="8" ' + glass + '/>';
     s += '<circle cx="60" cy="46" r="8" ' + dim + '/>';
     s += '<path d="M96 40h10M96 52h10" ' + dim + '/>';
+  } else if(kind === 'ps'){
+    // 傻瓜机：扁平机身 + 小镜头 + 闪光窗
+    s += '<rect x=\"11\" y=\"46\" width=\"98\" height=\"42\" rx=\"9\" ' + o + '/>';
+    s += '<circle cx=\"49\" cy=\"67\" r=\"14\" ' + o + '/>';
+    s += '<circle cx=\"49\" cy=\"67\" r=\"7\" ' + glass + '/>';
+    s += '<rect x=\"76\" y=\"54\" width=\"22\" height=\"12\" rx=\"3\" ' + dim + '/>';
+    s += '<circle cx=\"24\" cy=\"59\" r=\"4.5\" ' + dim + '/>';
+    s += '<path d=\"11 79h98\" ' + dim + '/>';
   } else {
-    s += '<rect x="13" y="47" width="94" height="51" rx="8" ' + o + '/>';
+    s += '<rect x=\"13\" y=\"47\" width=\"94\" height=\"51\" rx=\"8\" ' + o + '/>';
     s += '<path d="M45 47v-9h30v9" ' + o + '/>';
     s += '<circle cx="60" cy="73" r="24" ' + o + '/>';
     s += '<circle cx="60" cy="73" r="13" ' + glass + '/>';
@@ -3021,6 +3068,90 @@ function sheetAddSeg(rollId){
     '</div>';
 }
 
+/* ============================================================
+   设备线稿
+   ============================================================
+   没有设备照片时的占位。可以随时换成真实拍照抠图 —— 线稿只是"先用着"。
+   ============================================================ */
+var ILLUS = [
+  { k:'slr',  label:'单反' },
+  { k:'rf',   label:'旁轴' },
+  { k:'tlr',  label:'双反' },
+  { k:'ps',   label:'傻瓜机' },
+  { k:'lens', label:'镜头' }
+];
+
+function illusLabel(k){
+  for (var i = 0; i < ILLUS.length; i++) if (ILLUS[i].k === k) return ILLUS[i].label;
+  return '设备';
+}
+
+function sheetIllus(targetId){
+  return '<div class="grab"></div>' +
+    '<h3>选一个线稿</h3>' +
+    '<p class="sh-sub">暂时没有设备照片时先用线稿代替。之后随时可以拍照或选图，换成真实抠图。</p>' +
+    '<div class="illusgrid">' +
+      ILLUS.map(function(x){
+        return '<button class="illuscard" data-act="pickIllus" data-k="' + x.k + '"' +
+          ' data-id="' + esc(targetId || '') + '">' +
+          '<span class="illusart">' + deviceSVG(x.k) + '</span>' +
+          '<span class="illusname">' + esc(x.label) + '</span>' +
+        '</button>';
+      }).join('') +
+    '</div>' +
+    '<div class="sheet-actions single" style="margin-top:18px">' +
+      '<button class="btn ghost" data-act="closeSheet">取消</button>' +
+    '</div>';
+}
+
+/* ============================================================
+   热门胶卷预设
+   ============================================================
+   只是快捷方式，不是白名单 —— 型号输入框仍然是自由文本，随时可以手输。
+   选中会同时填好规格和 ISO：只填型号的话用户还得自己补另两项，
+   而这两项本来就是胶卷的固有属性，没必要让人再打一遍。
+   ============================================================ */
+var FILM_PRESETS = [
+  { n:'KODAK PORTRA 400',     s:'135', iso:400  },
+  { n:'KODAK PORTRA 160',     s:'135', iso:160  },
+  { n:'KODAK EKTAR 100',      s:'135', iso:100  },
+  { n:'KODAK GOLD 200',       s:'135', iso:200  },
+  { n:'KODAK ULTRA MAX 400',  s:'135', iso:400  },
+  { n:'KODAK COLORPLUS 200',  s:'135', iso:200  },
+  { n:'KODAK TRI-X 400',      s:'135', iso:400  },
+  { n:'KODAK T-MAX 400',      s:'135', iso:400  },
+  { n:'KODAK T-MAX 100',      s:'135', iso:100  },
+  { n:'ILFORD HP5 PLUS',      s:'135', iso:400  },
+  { n:'ILFORD FP4 PLUS',      s:'135', iso:125  },
+  { n:'ILFORD DELTA 3200',    s:'135', iso:3200 },
+  { n:'ILFORD DELTA 100',     s:'135', iso:100  },
+  { n:'ILFORD XP2 SUPER',     s:'135', iso:400  },
+  { n:'ILFORD PAN F PLUS',    s:'135', iso:50   },
+  { n:'FUJI PRO 400H',        s:'120', iso:400  },
+  { n:'FUJI VELVIA 50',       s:'120', iso:50   },
+  { n:'FUJI PROVIA 100F',     s:'120', iso:100  },
+  { n:'FUJI ACROS 100 II',    s:'135', iso:100  },
+  { n:'FUJI SUPERIA 400',     s:'135', iso:400  },
+  { n:'FUJI C200',            s:'135', iso:200  },
+  { n:'CINE STILL 800T',      s:'135', iso:800  },
+  { n:'CINE STILL 50D',       s:'135', iso:50   },
+  { n:'LOMO CN 400',          s:'135', iso:400  },
+  { n:'KENTMERE 400',         s:'135', iso:400  },
+  { n:'AGFA VISTA 200',       s:'135', iso:200  },
+  { n:'乐凯 SHD 100',          s:'135', iso:100  },
+  { n:'上海 GP3 100',          s:'120', iso:100  },
+  { n:'公元 ERA 100',          s:'120', iso:100  }
+];
+
+/** 预设 chip 行。act 是点击后触发的 data-act，两个弹窗共用。 */
+function filmPresetChips(act){
+  return FILM_PRESETS.map(function(p){
+    return '<button class="chip" data-act="' + act + '"' +
+      ' data-n="' + esc(p.n) + '" data-s="' + p.s + '" data-iso="' + p.iso + '">' +
+      esc(p.n) + '</button>';
+  }).join('');
+}
+
 function sheetEditRoll(rollId){
   var r = rollById(rollId);
   return '<div class="grab"></div>' +
@@ -3030,6 +3161,10 @@ function sheetEditRoll(rollId){
       '<label for="fFilm">胶卷型号</label>' +
       '<input type="text" id="fFilm" value="' + esc(r.film) + '" placeholder="任意品牌与型号">' +
       '<div class="hint">' + I.info + '不受预设选项限制，直接输入即可。</div>' +
+    '</div>' +
+    '<div class="field">' +
+      '<label>热门胶卷 · 点一下自动填好规格和 ISO</label>' +
+      '<div class="chiprow">' + filmPresetChips('pickFilm') + '</div>' +
     '</div>' +
     '<div class="fieldrow">' +
       '<div class="field"><label>胶卷规格</label>' +
@@ -3768,10 +3903,10 @@ function sheetAddGear(){
         '<span class="os" style="display:block">用已有的照片，同样可以抠图</span></span>' +
         '<span class="oa">' + I.right + '</span></button>' +
 
-      '<button class="opt" data-act="manualGear">' +
+      '<button class="opt" data-act="illusPick">' +
         '<span class="oi">' + I.pen + '</span>' +
-        '<span style="min-width:0"><span class="ot" style="display:block">仅手动录入信息</span>' +
-        '<span class="os" style="display:block">暂时没有照片，先登记型号与卡口</span></span>' +
+        '<span style="min-width:0"><span class="ot" style="display:block">先用线稿代替</span>' +
+        '<span class="os" style="display:block">挑一个现成的机身或镜头线稿，之后随时换真图</span></span>' +
         '<span class="oa">' + I.right + '</span></button>' +
     '</div>' +
 
@@ -3780,31 +3915,49 @@ function sheetAddGear(){
 }
 
 function sheetAddStock(){
+  var spec = (state.sheetArg && state.sheetArg.spec) || '135';
   return '<div class="grab"></div>' +
     '<h3>新增库存胶卷</h3>' +
     '<p class="sh-sub">记录数量与过期时间，列表会自动按过期时间由近到远排序。</p>' +
+
     '<div class="field">' +
       '<label for="sName">胶卷型号</label>' +
-      '<input type="text" id="sName" placeholder="自由输入，例如 Kentmere 400">' +
+      '<input type="text" id="sName" placeholder="自由输入，或从下面选一个">' +
     '</div>' +
+
+    '<div class="field">' +
+      '<label>热门胶卷 · 点一下自动填好规格和 ISO</label>' +
+      '<div class="chiprow">' + filmPresetChips('pickFilm') + '</div>' +
+    '</div>' +
+
     '<div class="fieldrow">' +
       '<div class="field"><label>规格</label>' +
-        '<div class="segctl" style="width:100%">' +
-          '<button aria-pressed="true" style="flex:1">135</button>' +
-          '<button aria-pressed="false" style="flex:1">120</button>' +
+        '<div class="segctl" id="sSpec" style="width:100%">' +
+          '<button data-act="pickStockSpec" data-v="135" aria-pressed="' + (spec === '135') + '" style="flex:1">135</button>' +
+          '<button data-act="pickStockSpec" data-v="120" aria-pressed="' + (spec === '120') + '" style="flex:1">120</button>' +
         '</div></div>' +
       '<div class="field"><label for="sQty">数量</label>' +
         '<input type="text" id="sQty" value="1"></div>' +
     '</div>' +
+
     '<div class="field">' +
       '<label for="sExp">过期时间</label>' +
-      '<input type="date" id="sExp" value="2028-06-01">' +
+      '<input type="date" id="sExp" value="' + defaultExp() + '">' +
       '<div class="hint">' + I.info + '过期前 90 天开始提醒，30 天内标红。</div>' +
     '</div>' +
+
     '<div class="sheet-actions">' +
       '<button class="btn ghost" data-act="closeSheet">取消</button>' +
-      '<button class="btn primary" data-act="save" data-t="已加入胶卷仓库">' + I.check + '保存</button>' +
+      '<button class="btn primary" data-act="stockSave">' + I.check + '加入仓库</button>' +
     '</div>';
+}
+
+/** 默认过期时间取两年后 —— 胶卷保质期普遍在 1–3 年。 */
+function defaultExp(){
+  var d = new Date();
+  return (d.getFullYear() + 2) + '-' +
+    ('0' + (d.getMonth() + 1)).slice(-2) + '-' +
+    ('0' + d.getDate()).slice(-2);
 }
 
 function sheetStockItem(name){
@@ -3841,7 +3994,7 @@ function sheetGear(id){
 
     '<div class="cutdemo" style="grid-template-columns:1fr">' +
       '<figure><div class="cimg">' + gearImage(g) + '</div>' +
-      '<figcaption>' + (g.photo ? '设备照片 · 已抠图' : '还没有照片 · 暂用线稿') + '</figcaption></figure>' +
+      '<figcaption>' + (g.photo ? '设备照片 · 已抠图' : '线稿 · ' + illusLabel(g.ill)) + '</figcaption></figure>' +
     '</div>' +
 
     '<div class="opts" style="margin-bottom:18px">' +
@@ -3852,6 +4005,11 @@ function sheetGear(id){
       '<button class="opt" data-act="pickPhoto" data-purpose="gear-again" data-id="' + g.id + '">' +
         '<span class="oi">' + I.up + '</span>' +
         '<span style="min-width:0"><span class="ot" style="display:block">从相册换一张</span></span>' +
+        '<span class="oa">' + I.right + '</span></button>' +
+      '<button class="opt" data-act="illusPick" data-id="' + g.id + '">' +
+        '<span class="oi">' + I.pen + '</span>' +
+        '<span style="min-width:0"><span class="ot" style="display:block">改用线稿</span>' +
+        '<span class="os" style="display:block">当前：' + esc(g.photo ? '真实照片' : '线稿 · ' + illusLabel(g.ill)) + '</span></span>' +
         '<span class="oa">' + I.right + '</span></button>' +
     '</div>' +
 
@@ -3949,6 +4107,7 @@ function renderSheet(){
     case 'importing': h = sheetImporting(); break;
     case 'cutout':    h = sheetCutout(); break;
     case 'settings':  h = sheetSettings(); break;
+    case 'illus':     h = sheetIllus(state.sheetArg.id); break;
   }
   sheetEl.innerHTML = h;
   sheetEl.scrollTop = sheetScroll;
@@ -4286,6 +4445,100 @@ document.getElementById('phone').addEventListener('click', function(e){
       renderSheet();
       break;
 
+    // ---------- 设备线稿 ----------
+
+    case 'illusPick':
+      openSheet('illus', {id: d.id || ''});
+      break;
+
+    case 'pickIllus': {
+      var tid = d.id;
+      var gg = null;
+      if (tid) GEAR.forEach(function(x){ if (x.id === tid) gg = x; });
+      var isLens = (d.k === 'lens');
+      if (!gg) {
+        tid = 'g' + Date.now().toString(36);
+        gg = {
+          id: tid,
+          kind: isLens ? 'lens' : 'body',
+          name: isLens ? '新镜头' : '新机身',
+          sub: '', rolls: 0, ill: d.k, photo: null
+        };
+        GEAR.unshift(gg);
+      } else {
+        gg.ill = d.k;
+        gg.photo = null;          // 换成线稿就把之前的照片清掉，避免两个来源打架
+      }
+      saveDoc();
+      closeSheet();
+      render(true);
+      openSheet('gearItem', {id: tid});
+      break;
+    }
+
+    // ---------- 胶卷预设 ----------
+
+    case 'pickFilm': {
+      // 预设只是快捷方式：填型号、规格、ISO，之后照样能改
+      var fi = document.getElementById('fFilm') || document.getElementById('sName');
+      if (fi) fi.value = d.n;
+      var ii = document.getElementById('fIso');
+      if (ii) ii.value = d.iso;
+      var wrap = document.getElementById('fSpec') || document.getElementById('sSpec');
+      if (wrap) {
+        [].forEach.call(wrap.children, function(b){
+          b.setAttribute('aria-pressed', b.getAttribute('data-v') === d.s);
+        });
+      }
+      if (!state.sheetArg) state.sheetArg = {};
+      state.sheetArg.spec = d.s;
+      state.sheetArg.iso = parseInt(d.iso, 10) || 400;
+      break;
+    }
+
+    case 'pickStockSpec':
+      if (!state.sheetArg) state.sheetArg = {};
+      state.sheetArg.spec = d.v;
+      (function(){ var w = t.parentNode; [].forEach.call(w.children, function(b){
+        b.setAttribute('aria-pressed', b === t); }); })();
+      break;
+
+    case 'stockSave': {
+      var sNameEl = document.getElementById('sName');
+      var nm = sNameEl ? String(sNameEl.value || '').trim() : '';
+      if (!nm) { toast('请填写或选一个胶卷型号'); break; }
+
+      var qtyEl = document.getElementById('sQty');
+      var qty = parseInt(qtyEl ? qtyEl.value : '1', 10);
+      if (!qty || qty < 1) qty = 1;
+
+      var expEl = document.getElementById('sExp');
+      var expFull = expEl ? String(expEl.value || '') : '';
+      var exp = expFull ? expFull.slice(0, 7) : '2099-12';
+
+      var sp = (state.sheetArg && state.sheetArg.spec) || '135';
+      var iso = (state.sheetArg && state.sheetArg.iso) || 400;
+
+      // 同型号同规格就累加数量、取更早的过期时间 ——
+      // 库存列表里不该出现两条一模一样的
+      var found = null;
+      for (var si = 0; si < STOCK.length; si++) {
+        if (STOCK[si].name === nm && STOCK[si].spec === sp) { found = STOCK[si]; break; }
+      }
+      if (found) {
+        found.qty += qty;
+        if (exp < found.exp) found.exp = exp;
+        toast('已累加 ' + qty + ' 卷 · ' + nm);
+      } else {
+        STOCK.push({ name: nm, spec: sp, iso: iso, qty: qty, exp: exp });
+        toast('已加入 ' + nm + ' ×' + qty);
+      }
+      saveDoc();
+      closeSheet();
+      render(true);
+      break;
+    }
+
     case 'cutoutCancel':
       Native.cutoutEnd();
       state.cutout = null;
@@ -4311,7 +4564,7 @@ document.getElementById('phone').addEventListener('click', function(e){
     }
 
     case 'addStock':
-      openSheet('addStock'); break;
+      openSheet('addStock', {}); break;
 
     case 'stock':
       openSheet('stockItem', {name:d.n}); break;

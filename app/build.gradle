@@ -16,9 +16,10 @@ android {
         // 权限流程，不如把下限提到 Android 10。2026 年这覆盖 97%+ 在用设备。
         minSdk 29
         targetSdk 34
-        // 覆盖安装现有演示版的前提：applicationId 不变 + 同一把签名密钥
-        versionCode 2
-        versionName '0.2.0'
+        // 覆盖安装现有版本的前提：applicationId 不变 + 同一把签名密钥
+        // 每次打包记得 +1 —— 构建脚本会把当前版本号打出来
+        versionCode 3
+        versionName '0.3.0'
 
         // MediaPipe 的原生库四个 ABI 加起来约 48 MB，只留 arm64-v8a。
         // 这不是优化，是必需。

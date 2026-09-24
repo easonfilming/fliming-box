@@ -61,6 +61,12 @@ if ($LASTEXITCODE -ne 0) { throw "APK 条目名断言失败" }
 
 Write-Output ""
 Write-Output "============================================"
+# 版本号从 build.gradle 里读出来打在这里 —— 每次打包都要 +1，
+# 忘了的话一眼就能看见（覆盖安装靠的就是它递增）
+$g = Get-Content "$root\app\build.gradle" -Raw
+$vc = ([regex]'versionCode\s+(\d+)').Match($g).Groups[1].Value
+$vn = ([regex]"versionName\s+'([^']+)'").Match($g).Groups[1].Value
+Write-Output ("  版本: " + $vn + "  (versionCode " + $vc + ")")
 Write-Output ("  产物: " + $apk)
 Write-Output ("  体积: " + [math]::Round((Get-Item $apk).Length / 1MB, 2) + " MB")
 Write-Output "============================================"
