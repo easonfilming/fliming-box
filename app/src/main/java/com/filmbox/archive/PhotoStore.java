@@ -70,6 +70,10 @@ public class PhotoStore {
         public int thumbW, thumbH;
         public long bytes;
         public boolean original;
+        /** 内容本来是竖构图、被转成横的存下来了（见 importOne 第 3.5 步）。
+         *  存储的像素已经是横的，单看 w/h 分不出「本来就是横构图」和
+         *  「竖构图转过来的」—— 边框要按内容方向排版，就得记这一笔。 */
+        public boolean rotated;
         public long origBytes;
         public String origExt;
         public String takenAt;
@@ -153,6 +157,7 @@ public class PhotoStore {
                 if (rotated != scaled) {
                     scaled.recycle();
                     scaled = rotated;
+                    r.rotated = true;
                 }
             }
 

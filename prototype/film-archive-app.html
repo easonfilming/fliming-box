@@ -1682,7 +1682,9 @@ h1{
 .wm-ink{background:#141110;padding:9px 9px 0;border:1px solid var(--bd2)}
 .wm-sprocket{background:#2E2015;padding:0;position:relative}
 .wm-photo{
-  /* 比例由内联样式按照片给，不写死 */
+  /* --cr 由 borderLayout() 按照片本身的比例算出来（合成画面就是 3:2），
+     写在 .wm 的内联样式里。写死 3:2 会把 4:3、6×6、竖构图的照片一律裁掉。 */
+  aspect-ratio:var(--cr, 3/2);
   max-width:100%;
   overflow:hidden;
   background:#0E0A06;
@@ -1721,6 +1723,21 @@ h1{
 .wm-sprocket::before{left:0}
 .wm-sprocket::after{right:0}
 .wm-sprocket .wm-photo{margin:9px 15px 0}
+
+/* 竖构图边框。横画幅的信息栏压在下沿、齿孔排在左右两条短边上；
+   竖构图整个调过来 —— 信息落在短边（下沿），齿孔顺着左右两条长边往下走。 */
+.wm-port .wm-meta{padding:11px 16px 13px;text-align:center}
+.wm-port .wm-line{justify-content:center}
+/* 导入时转过 90° 的照片，存下来的像素是躺着的。把布局盒的宽高互换、
+   再逆时针转回来，转完正好落进竖画框 —— 容器宽高比已经按竖着看的比例
+   设好了，--ci 就是 --cr 的倒数。 */
+.wm-photo img.ph.rot{
+  position:absolute; top:50%; left:50%;
+  width:calc(100% * var(--ci));
+  height:calc(100% * var(--cr));
+  max-width:none;
+  transform:translate(-50%,-50%) rotate(-90deg);
+}
 
 .exportmeta{
   display:flex;
@@ -2920,6 +2937,7 @@ var state = {
   sheetArg:null,
   segStart:1,
   wmStyle:'cream',
+  wmPort:null,          // 边框方向：null 自动 / true 强制竖构图
   importKeep:false,
   importProgress:null,
   gearTarget:'',
@@ -3612,13 +3630,16 @@ function sheetBorder(rollId, idx){
   var r = rollById(rollId);
   var fr = frames(r)[idx];
   var s = segOf(r, idx);
+  var L = borderLayout(fr, state.wmPort);
+  var px = borderPx(L, state.wmStyle === 'sprocket');
   var styles = [['cream','白边'],['ink','黑边'],['sprocket','齿孔']];
+  var dirs = [[null,'自动'],[true,'竖构图']];
   return '<div class="grab"></div>' +
     '<h3>胶片水印边框</h3>' +
     '<p class="sh-sub">为单张照片套上胶片风格边框，记录拍摄地点、拍摄时间与相机型号。</p>' +
-    '<div class="wm wm-' + state.wmStyle + '">' +
-      '<div class="wm-photo" style="aspect-ratio:' + (fr.photo ? fr.photo.w + '/' + fr.photo.h : '3/2') + '">' +
-        frameInner(r, fr, 'photos') + '</div>' +
+    '<div class="wm wm-' + state.wmStyle + (L.port ? ' wm-port' : '') +
+        '" style="--cr:' + L.cr.toFixed(4) + ';--ci:' + L.ci.toFixed(4) + '">' +
+      '<div class="wm-photo">' + borderPhoto(r, fr, L) + '</div>' +
       '<div class="wm-meta">' +
         '<div class="wm-loc">' + esc(s ? s.loc : '未标记地点') + '</div>' +
         '<div class="wm-line">' +
@@ -3641,9 +3662,21 @@ function sheetBorder(rollId, idx){
         }).join('') +
       '</div>' +
     '</div>' +
+    '<div class="field">' +
+      '<label>画面方向</label>' +
+      '<div class="segctl" style="width:100%">' +
+        dirs.map(function(x){
+          return '<button data-act="wmdir" data-v="' + (x[0] === null ? '' : 'port') +
+            '" aria-pressed="' + (state.wmPort === x[0]) + '" style="flex:1">' + x[1] + '</button>';
+        }).join('') +
+      '</div>' +
+      '<p class="sh-sub" style="margin-top:8px;margin-bottom:0">' +
+        '竖着拍的照片会自动套竖边框 —— 信息落在短边，齿孔顺着两条长边走。' +
+        'v0.7.0 之前导入的竖图没留下标记，自动认不出来时可以在这里指定。</p>' +
+    '</div>' +
     '<div class="exportmeta">' +
-      '<span>' + (fr.photo && fr.photo.h > fr.photo.w ? '竖版' : '横版') +
-        ' · 长边 2000 px</span><span>地点 + 时间 + 机身</span><span>' + r.spec + '</span>' +
+      '<span>' + (L.port ? '竖版' : '横版') + ' · ' + px.W + ' × ' + px.H + ' px</span>' +
+      '<span>地点 + 时间 + 机身</span><span>' + r.spec + '</span>' +
     '</div>' +
     '<div class="sheet-actions">' +
       '<button class="btn ghost" data-act="closeSheet">取消</button>' +
@@ -3846,11 +3879,22 @@ function loadPhoto(url){
 
 /** 等比铺满目标框、居中裁切（等价于 CSS object-fit:cover）。
  *  导出的图不留边 —— 四周一圈空边在成品图里很难看。
- *  竖构图的照片在导入时已经转成横向，所以这里不用管方向。 */
-function drawFit(g, img, x, y, w, h){
+ *  rot：存的像素是躺着的（导入时转过 90°），先转回正的再铺。 */
+function drawFit(g, img, x, y, w, h, rot){
   var iw = img.naturalWidth || img.width;
   var ih = img.naturalHeight || img.height;
   if (!iw || !ih) return;
+  if (rot) {
+    // 绕目标框中心逆时针转 90°，再把图居中画上去。
+    // 转完视觉宽 = 图高、视觉高 = 图宽，所以取比例时两个维度要换过来。
+    g.save();
+    g.translate(x + w / 2, y + h / 2);
+    g.rotate(-Math.PI / 2);
+    var rs = Math.max(w / ih, h / iw);
+    g.drawImage(img, -iw * rs / 2, -ih * rs / 2, iw * rs, ih * rs);
+    g.restore();
+    return;
+  }
   var s = Math.max(w / iw, h / ih);
   var dw = iw * s, dh = ih * s;
   g.drawImage(img, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh);
@@ -3897,6 +3941,52 @@ function frameImage(roll, fr, kind){
 
 /* ---------- 单张水印边框 ---------- */
 
+/* ---------- 边框排版 ---------- */
+
+/** 边框的画面区怎么排。
+ *
+ *  cr   画面区的宽高比（竖构图 < 1），直接喂给 CSS 的 aspect-ratio
+ *  rot  存储的像素是躺着的（导入时转过 90°），画的时候要转回来才正
+ *  port 竖构图
+ *
+ *  预览（CSS 变量）和导出（canvas 像素）共用这一份计算 —— 两边各写一遍
+ *  必然会分叉，预览和成品对不上是这类功能最容易出的问题。
+ *
+ *  force 是手动指定：竖图从 v0.5.0 起才在导入时记下 photo.rot，之前导入的
+ *  那批存的也是横的、却没留标记，自动判断认不出来，只能让用户点一下。 */
+function borderLayout(fr, force){
+  var p = fr && fr.photo;
+  var rot = !!(p && p.rot);
+  if (force === true && p && (p.w || 0) > (p.h || 0)) rot = true;
+  // 竖着看时的宽高比。转过 90° 的，存储的宽高要换回来。
+  var ar = 3 / 2;
+  if (p) {
+    var pw = p.w || 1, ph = p.h || 1;
+    ar = rot ? (ph / pw) : (pw / ph);
+  }
+  return { cr: ar, ci: 1 / ar, rot: rot, port: ar < 1 };
+}
+
+/** 导出画布的像素尺寸。PW/PH 是画面区，W/H 是整张。
+ *  画面区的长边固定 2000，短边按比例走 —— 比例跟照片一致，零裁切零留边。 */
+function borderPx(L, sprocket){
+  var PAD = sprocket ? 110 : 90;
+  var BAR = 180;                                   // 底部文字区
+  var LONG = 2000;
+  var PW, PH;
+  if (L.cr >= 1) { PW = LONG; PH = Math.round(LONG / L.cr); }
+  else           { PH = LONG; PW = Math.round(LONG * L.cr); }
+  return { PW: PW, PH: PH, PAD: PAD, BAR: BAR, W: PW + PAD * 2, H: PH + PAD + BAR };
+}
+
+/** 边框预览里的画面。躺着存的交给 CSS 转回来（见 .wm-photo img.ph.rot）。 */
+function borderPhoto(r, fr, L){
+  var src = fr.photo ? Native.photoUrl(r.id, fr.photo.id, 'photos') : null;
+  if (!src) return frameInner(r, fr, 'photos');    // 合成画面
+  return '<img class="ph' + (L.rot ? ' rot' : '') + '" src="' + esc(src) +
+         '" decoding="async" alt="">';
+}
+
 var BORDER_STYLES = {
   cream:    { bg: '#F3EADA', fg: '#241C14', sub: '#6B5B48', sprocket: false },
   ink:      { bg: '#141110', fg: '#F1E7D7', sub: '#A48F76', sprocket: false },
@@ -3905,21 +3995,13 @@ var BORDER_STYLES = {
 
 function renderBorder(roll, idx, style, img){
   var S = BORDER_STYLES[style] || BORDER_STYLES.cream;
-  var PAD = S.sprocket ? 110 : 90;
-  var BAR = 180;                                   // 底部文字区
-
-  // 画面区跟着照片的比例走，不写死 3:2。
-  // 写死的话竖照片配 cover 会从中间裁掉一大条；配 contain 又留一大圈边。
-  // 长边固定 2000，另一边按比例算 —— 竖构图自然就是竖版边框，零裁切零留边。
-  var iw = img.naturalWidth || img.width || 3;
-  var ih = img.naturalHeight || img.height || 2;
-  var LONG = 2000;
-  var PW, PH;
-  if (iw >= ih) { PW = LONG; PH = Math.round(LONG * ih / iw); }
-  else          { PH = LONG; PW = Math.round(LONG * iw / ih); }
-
-  var W = PW + PAD * 2;
-  var H = PH + PAD + BAR;
+  // 画面区的比例、方向、要不要转回来 —— 跟预览共用同一份计算。
+  // 注意比例取自照片的元数据而不是解码后的图：导入时竖图被转过 90°，
+  // 光看像素已经分不出「本来就横着拍」和「竖着拍转过来的」。
+  var L = borderLayout(frames(roll)[idx], state.wmPort);
+  var px = borderPx(L, S.sprocket);
+  var PW = px.PW, PH = px.PH, PAD = px.PAD, BAR = px.BAR;
+  var W = px.W, H = px.H;
 
   var c = newCanvas(W, H);
   var g = c.getContext('2d');
@@ -3928,7 +4010,8 @@ function renderBorder(roll, idx, style, img){
   g.fillRect(0, 0, W, H);
 
   if (S.sprocket) {
-    // 两侧齿孔
+    // 齿孔永远排在左右两条边上。竖画幅的左右就是两条长边（信息落在短边），
+    // 正是竖构图边框该有的样子；横画幅沿用原来的排法。
     g.fillStyle = 'rgba(241,231,215,0.85)';
     var holeW = 26, holeH = 34, gap = 46;
     for (var y = 26; y + holeH < H - 26; y += holeH + gap) {
@@ -3937,20 +4020,30 @@ function renderBorder(roll, idx, style, img){
     }
   }
 
-  drawFit(g, img, PAD, PAD, PW, PH);
+  drawFit(g, img, PAD, PAD, PW, PH, L.rot);
 
   // 画面描边，把照片和底分开
   g.strokeStyle = S.sprocket ? 'rgba(0,0,0,.55)' : 'rgba(0,0,0,.12)';
   g.lineWidth = 2;
   g.strokeRect(PAD + 1, PAD + 1, PW - 2, PH - 2);
 
+  var maxW = W - PAD * 2;
+  var tx = L.port ? W / 2 : PAD;                   // 竖构图居中，跟预览一致
+  if (L.port) g.textAlign = 'center';
+
   // 地点
   var s = segOf(roll, idx);
   var loc = s ? s.loc : '未标记地点';
   g.fillStyle = S.fg;
   g.textBaseline = 'alphabetic';
-  g.font = '600 62px "Noto Serif SC","Songti SC",serif';
-  g.fillText(loc, PAD, PH + PAD + 66);
+  var lfs = 62;
+  g.font = '600 ' + lfs + 'px "Noto Serif SC","Songti SC",serif';
+  // 太长的地点名缩字号，不裁切 —— 竖构图画框窄，中文地名很容易顶出去
+  while (lfs > 34 && g.measureText(loc).width > maxW) {
+    lfs -= 2;
+    g.font = '600 ' + lfs + 'px "Noto Serif SC","Songti SC",serif';
+  }
+  g.fillText(loc, tx, PH + PAD + 20 + Math.round(lfs * 0.74));
 
   // 日期 · 机身 · 胶卷
   var parts = [fmtDate(roll.shots && roll.shots[0] ? roll.shots[0] : roll.primary)];
@@ -3960,14 +4053,13 @@ function renderBorder(roll, idx, style, img){
 
   g.fillStyle = S.sub;
   g.font = '400 36px "Space Mono",monospace';
-  var maxW = W - PAD * 2;
   // 太长就缩字号，不裁切
   var fs = 36;
-  while (fs > 22 && g.measureText(line).width > maxW) {
+  while (fs > 20 && g.measureText(line).width > maxW) {
     fs -= 2;
     g.font = '400 ' + fs + 'px "Space Mono",monospace';
   }
-  g.fillText(line, PAD, PH + PAD + 126);
+  g.fillText(line, tx, PH + PAD + 126);
 
   return c;
 }
@@ -4832,10 +4924,15 @@ document.getElementById('phone').addEventListener('click', function(e){
 
     case 'exportBorder':
       state.wmStyle = 'cream';
+      state.wmPort = null;                 // 每张照片重新自动判断
       openSheet('border', {roll:d.id, i:+(d.i || 0)}); break;
 
     case 'wmstyle':
       state.wmStyle = d.v;
+      renderSheet(); break;
+
+    case 'wmdir':
+      state.wmPort = (d.v === 'port') ? true : null;
       renderSheet(); break;
 
     case 'save':

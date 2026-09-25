@@ -484,6 +484,7 @@ public class Bridge implements Importer.Callback, Capture.Callback {
         p.put("thumbH", r.thumbH);
         p.put("bytes", r.bytes);
         p.put("original", r.original);
+        if (r.rotated) p.put("rot", true);
         p.put("origBytes", r.origBytes);
         if (r.origExt != null) p.put("origExt", r.origExt);
         if (r.takenAt != null) p.put("takenAt", r.takenAt);
