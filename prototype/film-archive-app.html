@@ -491,10 +491,18 @@ h1{
   display:grid;
   place-items:center;
 }
-.frbox img.ph, .mini-f img.ph, .cs-f img.ph, .wm-photo img.ph{
+.frbox img.ph, .mini-f img.ph, .cs-f img.ph{
   width:100%;
   height:100%;
   object-fit:cover;
+  display:block;
+}
+/* 水印预览：盒子的比例已经跟照片一致了，contain 就是铺满，
+   而且万一比例算错也不会裁掉画面。 */
+.wm-photo img.ph{
+  width:100%;
+  height:100%;
+  object-fit:contain;
   display:block;
 }
 /* 单帧大图是「看照片」的地方，保留完整画面。
@@ -1674,7 +1682,7 @@ h1{
 .wm-ink{background:#141110;padding:9px 9px 0;border:1px solid var(--bd2)}
 .wm-sprocket{background:#2E2015;padding:0;position:relative}
 .wm-photo{
-  aspect-ratio:3/2;
+  /* 比例由内联样式按照片给，不写死 */
   max-width:100%;
   overflow:hidden;
   background:#0E0A06;
@@ -3609,7 +3617,8 @@ function sheetBorder(rollId, idx){
     '<h3>胶片水印边框</h3>' +
     '<p class="sh-sub">为单张照片套上胶片风格边框，记录拍摄地点、拍摄时间与相机型号。</p>' +
     '<div class="wm wm-' + state.wmStyle + '">' +
-      '<div class="wm-photo">' + frameInner(r, fr, 'photos') + '</div>' +
+      '<div class="wm-photo" style="aspect-ratio:' + (fr.photo ? fr.photo.w + '/' + fr.photo.h : '3/2') + '">' +
+        frameInner(r, fr, 'photos') + '</div>' +
       '<div class="wm-meta">' +
         '<div class="wm-loc">' + esc(s ? s.loc : '未标记地点') + '</div>' +
         '<div class="wm-line">' +
@@ -3633,7 +3642,8 @@ function sheetBorder(rollId, idx){
       '</div>' +
     '</div>' +
     '<div class="exportmeta">' +
-      '<span>2180 × 1603 px</span><span>地点 + 时间 + 机身</span><span>' + r.spec + '</span>' +
+      '<span>' + (fr.photo && fr.photo.h > fr.photo.w ? '竖版' : '横版') +
+        ' · 长边 2000 px</span><span>地点 + 时间 + 机身</span><span>' + r.spec + '</span>' +
     '</div>' +
     '<div class="sheet-actions">' +
       '<button class="btn ghost" data-act="closeSheet">取消</button>' +
@@ -3895,9 +3905,19 @@ var BORDER_STYLES = {
 
 function renderBorder(roll, idx, style, img){
   var S = BORDER_STYLES[style] || BORDER_STYLES.cream;
-  var PW = 2000, PH = 1333;                       // 画面区（3:2）
   var PAD = S.sprocket ? 110 : 90;
   var BAR = 180;                                   // 底部文字区
+
+  // 画面区跟着照片的比例走，不写死 3:2。
+  // 写死的话竖照片配 cover 会从中间裁掉一大条；配 contain 又留一大圈边。
+  // 长边固定 2000，另一边按比例算 —— 竖构图自然就是竖版边框，零裁切零留边。
+  var iw = img.naturalWidth || img.width || 3;
+  var ih = img.naturalHeight || img.height || 2;
+  var LONG = 2000;
+  var PW, PH;
+  if (iw >= ih) { PW = LONG; PH = Math.round(LONG * ih / iw); }
+  else          { PH = LONG; PW = Math.round(LONG * iw / ih); }
+
   var W = PW + PAD * 2;
   var H = PH + PAD + BAR;
 
