@@ -701,17 +701,20 @@ h1{
 .row:focus-visible{outline:2px solid var(--am);outline-offset:2px}
 .rowthumb{
   flex:0 0 auto;
-  /* 3:2 而不是正方形 —— 底片画幅就是这个比例。
-     正方形配 cover 会把画面裁掉一大半，日历和分组列表里都看不清拍的是什么。 */
+  /* 3:2 而不是正方形 —— 底片画幅就是这个比例，扫描件正好铺满。
+     比例不标准的照片用 contain 完整显示，不裁切；底色用片基琥珀，
+     留边时看着像胶片，不像黑边。 */
   width:68px;
   height:45px;
   border-radius:6px;
   overflow:hidden;
-  background:#0E0A06;
+  background:linear-gradient(180deg,#33240F,#4A3418 50%,#33240F);
   box-shadow:inset 0 0 0 1px rgba(0,0,0,.5);
+  display:grid;
+  place-items:center;
 }
 .rowthumb svg{display:block;width:100%;height:100%}
-.rowthumb img.ph{object-fit:cover}
+.rowthumb img.ph{object-fit:contain}
 .rowbody{min-width:0;flex:1}
 .rowt{
   display:block;
@@ -3232,7 +3235,6 @@ function viewGear(){
         '<span class="gearsub" style="display:block">' + esc(g.sub) + '</span>' +
         '<span class="gearmeta">' +
           '<span class="kind">' + (g.kind === 'body' ? '机身' : '镜头') + '</span>' +
-          '<span style="margin-left:auto">' + gearRolls(g) + ' 卷</span>' +
         '</span>' +
       '</span>' +
     '</button>';
@@ -4144,17 +4146,6 @@ window.__bridge.onExportError = function(json){
    相机仓库：选图 / 线稿
    ============================================================ */
 
-/** 这台机身/镜头实际拍了几卷 —— 从胶卷档案里数。
- *  之前是存在 g.rolls 里的一个数字：新登记的永远是 0，删了胶卷也不会变，
- *  跟实际情况对不上。 */
-function gearRolls(g){
-  var n = 0;
-  ROLLS.forEach(function(r){
-    if (g.kind === 'lens' ? (r.lens === g.name) : (r.camera === g.name)) n++;
-  });
-  return n;
-}
-
 /** 设备图：抠好的 PNG 优先，没有就退回手绘线稿。 */
 function gearImage(g){
   if (g.photo) {
@@ -4460,7 +4451,7 @@ function sheetGear(id){
   if(!g) return '';
   return '<div class="grab"></div>' +
     '<h3>' + esc(g.name) + '</h3>' +
-    '<p class="sh-sub">' + (g.sub ? esc(g.sub) + ' · ' : '') + '已拍 ' + gearRolls(g) + ' 卷</p>' +
+    '<p class="sh-sub">' + (g.sub ? esc(g.sub) : '还没有填写卡口 / 规格') + '</p>' +
 
     '<div class="cutdemo" style="grid-template-columns:1fr">' +
       '<figure><div class="cimg">' + gearImage(g) + '</div>' +
