@@ -141,6 +141,21 @@ public class PhotoStore {
                 bmp = null;
             }
 
+            // ---- 3.5 竖构图转 90° 存成横向 ----
+            // 135 的画幅永远是横的，竖着拍的照片在底片上本来就是躺着的。
+            // 在这里转正，界面和导出就只需要最普通的 contain —— 填满画框、
+            // 不裁切，而且不用在 CSS/canvas 里做任何旋转变换。
+            if (scaled.getHeight() > scaled.getWidth()) {
+                Matrix rm = new Matrix();
+                rm.postRotate(90);
+                Bitmap rotated = Bitmap.createBitmap(
+                        scaled, 0, 0, scaled.getWidth(), scaled.getHeight(), rm, true);
+                if (rotated != scaled) {
+                    scaled.recycle();
+                    scaled = rotated;
+                }
+            }
+
             // ---- 4. 写展示副本 ----
             File pf = photoFile(rollId, pid);
             ensureParent(pf);

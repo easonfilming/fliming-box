@@ -483,13 +483,20 @@ h1{
 .frbox svg{display:block;width:100%;height:100%}
 /* 真实照片铺满格位、居中裁切。合成 SVG 和真实 <img> 走同一个盒模型，
    所以底片条的几何完全不受影响。 */
-.frbox img.ph, .mini-f img.ph, .rowthumb img.ph,
-.framebig img.ph, .wm-photo img.ph{
+/* 照片一律 contain —— 裁掉就等于丢画面信息。底片画幅是固定的，
+   宁可留出片基色的边，也不要把画面切掉。
+   （.rowthumb 是 46×46 的小图标，另说，保持 cover。） */
+.frbox img.ph, .mini-f img.ph,
+.framebig img.ph, .wm-photo img.ph, .cs-f img.ph{
   width:100%;
   height:100%;
-  object-fit:cover;
+  object-fit:contain;
   display:block;
 }
+
+/* 照片一律 contain —— 裁掉就等于丢画面信息。底片画幅是固定的，
+   宁可留出片基色的边，也不要把画面切掉。
+   竖构图的照片在导入时已经转成横向了，所以这里不需要任何旋转。 */
 .frbox::after{
   content:"";
   position:absolute;inset:0;
@@ -686,6 +693,7 @@ h1{
   box-shadow:inset 0 0 0 1px rgba(0,0,0,.5);
 }
 .rowthumb svg{display:block;width:100%;height:100%}
+.rowthumb img.ph{object-fit:cover}
 .rowbody{min-width:0;flex:1}
 .rowt{
   display:block;
@@ -1506,7 +1514,7 @@ h1{
   background:#0E0A06;
   box-shadow:inset 0 0 0 1px rgba(0,0,0,.5);
 }
-.cs-f img.ph, .cs-f svg{display:block;width:100%;height:100%;object-fit:cover}
+.cs-f img.ph, .cs-f svg{display:block;width:100%;height:100%;object-fit:contain}
 .cs-num{
   font-family:"Space Mono", monospace;
   font-size:9px;
@@ -2601,6 +2609,12 @@ function frames(roll){
 }
 
 /** 一格的画面内容。kind: 'thumbs'（底片条，快）| 'photos'（单帧大图，清晰）。 */
+/**
+ * 一格画面。
+ *
+ * 竖构图在导入时就已经转成横向存下来了（见 PhotoStore.importOne），
+ * 所以这里不需要任何旋转 —— 普通的 contain 就能填满画框且不裁切。
+ */
 function frameInner(roll, fr, kind){
   if (fr.photo) {
     var src = Native.photoUrl(roll.id, fr.photo.id, kind || 'thumbs');
@@ -2612,6 +2626,7 @@ function frameInner(roll, fr, kind){
 }
 
 /** 一卷的封面：有照片就用第一张，否则用合成场景。 */
+/** 一卷的封面。46×46 的小方图标，裁一点无所谓，用 cover 更满。 */
 function rollThumb(roll){
   var ps = roll.photos;
   if (ps && ps.length) {
@@ -2671,7 +2686,7 @@ function framesHTML(roll, fw){
   for(var i=0;i<fr.length;i++){
     html += '<button class="fr" data-act="frame" data-roll="' + roll.id + '" data-i="' + i + '" ' +
             'aria-label="第 ' + esc(fr[i].label) + ' 格">' +
-            '<span class="frbox" style="width:' + fw + 'px;height:' + fh + 'px">' + frameInner(roll, fr[i], 'thumbs') + '</span>' +
+            '<span class="frbox" style="width:' + fw + 'px;height:' + fh + 'px">' + frameInner(roll, fr[i], 'thumbs', fw, fh) + '</span>' +
             '<span class="frnum">' + esc(fr[i].label) + '</span>' +
             '</button>';
   }
@@ -2745,7 +2760,7 @@ function contactSheetHTML(roll, fw, maxRows, showNums){
       if (cell.fr) {
         out += '<div class="cs-cell">' +
           '<div class="cs-f" style="width:' + fw + 'px;height:' + fh + 'px">' +
-            frameInner(roll, cell.fr, 'thumbs') +
+            frameInner(roll, cell.fr, 'thumbs', fw, fh) +
           '</div>' +
           (showNums ? '<div class="cs-num">' + esc(cell.fr.label) + '</div>' : '') +
         '</div>';
@@ -3255,9 +3270,13 @@ function sheetSeg(rollId, idx){
       '</div>' +
     '</div>' +
     '<div class="sheet-actions">' +
-      '<button class="btn ghost" data-act="closeSheet">取消</button>' +
+      (rollById(rollId).segs.length > 1
+        ? '<button class="btn ghost" data-act="segDelete" data-roll="' + rollId + '" data-i="' + idx + '">删除这段</button>'
+        : '<button class="btn ghost" data-act="closeSheet">取消</button>') +
       '<button class="btn primary" data-act="segSave" data-roll="' + rollId + '" data-i="' + idx + '">保存地点</button>' +
-    '</div>';
+    '</div>' +
+    '<p class="sh-sub" style="margin-top:14px;margin-bottom:0">' +
+      I.info + ' 删除分段不会删掉照片，相邻的分段会自动接上。</p>';
 }
 
 function sheetAddSeg(rollId){
@@ -3281,7 +3300,7 @@ function sheetAddSeg(rollId){
     '</div>' +
     '<div class="sheet-actions">' +
       '<button class="btn ghost" data-act="closeSheet">取消</button>' +
-      '<button class="btn primary" data-act="segAdd" data-roll="' + rollId + '" data-i="' + start + '">建立分段</button>' +
+      '<button class="btn primary" data-act="segAdd" data-roll="' + rollId + '">建立分段</button>' +
     '</div>';
 }
 
@@ -3369,6 +3388,20 @@ function filmPresetChips(act){
   }).join('');
 }
 
+/** 相机仓库里已登记的机身/镜头，点一下填进输入框。
+ *  没有登记过就返回空串，不占位置。 */
+function gearChips(kind, fieldId, current){
+  var list = GEAR.filter(function(g){ return g.kind === kind; });
+  if (!list.length) return '';
+  return '<div class="chiprow" style="margin-top:9px">' +
+    list.map(function(g){
+      return '<button class="chip" data-act="pickGear" data-field="' + fieldId + '"' +
+        ' data-v="' + esc(g.name) + '" aria-pressed="' + (current === g.name) + '">' +
+        esc(g.name) + '</button>';
+    }).join('') +
+  '</div>';
+}
+
 function sheetEditRoll(rollId){
   var r = rollById(rollId);
   return '<div class="grab"></div>' +
@@ -3395,11 +3428,13 @@ function sheetEditRoll(rollId){
     '<div class="field">' +
       '<label for="fCam">相机型号</label>' +
       '<input type="text" id="fCam" value="' + esc(r.camera) + '">' +
-      '<div class="hint">' + I.info + '与相机仓库联动，也可输入未登记的机身。</div>' +
+      '<div class="hint">' + I.info + '点下面的机身直接选用，也可以手输未登记的。</div>' +
+      gearChips('body', 'fCam', r.camera) +
     '</div>' +
     '<div class="field">' +
       '<label for="fLens">镜头</label>' +
       '<input type="text" id="fLens" value="' + esc(r.lens) + '">' +
+      gearChips('lens', 'fLens', r.lens) +
     '</div>' +
     '<div class="field">' +
       '<label>归入文件夹</label>' +
@@ -3439,7 +3474,14 @@ function sheetEditRoll(rollId){
     '<div class="sheet-actions">' +
       '<button class="btn ghost" data-act="closeSheet">取消</button>' +
       '<button class="btn primary" data-act="editSave" data-roll="' + rollId + '">保存</button>' +
-    '</div>';
+    '</div>' +
+    // 破坏性操作单独一行，别跟「保存」并排 —— 并排容易误触
+    '<div class="sheet-actions single" style="margin-top:10px">' +
+      '<button class="btn ghost" data-act="rollDelete" data-id="' + rollId + '"' +
+        ' style="color:var(--rust);border-color:rgba(210,85,58,.45)">删除这卷胶卷</button>' +
+    '</div>' +
+    '<p class="sh-sub" style="margin-top:12px;margin-bottom:0">' +
+      I.info + ' 删除会一并删掉这卷导入的照片，不可撤销。</p>';
 }
 
 function sheetFrame(rollId, idx){
@@ -3712,13 +3754,14 @@ function loadPhoto(url){
   });
 }
 
-/** 等比铺满目标框，居中裁切（等价于 CSS object-fit:cover）。 */
-function drawCover(g, img, x, y, w, h){
+/** 等比缩放到完整放进目标框（等价于 CSS object-fit:contain），不裁切。
+ *  竖构图的照片在导入时已经转成横向，所以这里不用管方向。 */
+function drawFit(g, img, x, y, w, h){
   var iw = img.naturalWidth || img.width;
   var ih = img.naturalHeight || img.height;
   if (!iw || !ih) return;
-  var k = Math.max(w / iw, h / ih);
-  var dw = iw * k, dh = ih * k;
+  var s = Math.min(w / iw, h / ih);
+  var dw = iw * s, dh = ih * s;
   g.drawImage(img, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh);
 }
 
@@ -3793,7 +3836,7 @@ function renderBorder(roll, idx, style, img){
     }
   }
 
-  drawCover(g, img, PAD, PAD, PW, PH);
+  drawFit(g, img, PAD, PAD, PW, PH);
 
   // 画面描边，把照片和底分开
   g.strokeStyle = S.sprocket ? 'rgba(0,0,0,.55)' : 'rgba(0,0,0,.12)';
@@ -3960,7 +4003,7 @@ function renderOverview(roll, imgs){
       var fx = sx + i * (fw + GAPX);
       var fy = y0 + PERF;
 
-      drawCover(g, imgs[k], fx, fy, fw, fh);
+      drawFit(g, imgs[k], fx, fy, fw, fh);
       g.strokeStyle = 'rgba(0,0,0,.55)';
       g.lineWidth = 1;
       g.strokeRect(fx + .5, fy + .5, fw - 1, fh - 1);
@@ -4115,7 +4158,8 @@ function sheetSettings(){
         '<button class="opt" data-act="loadSamples">' +
           '<span class="oi">' + I.up + '</span>' +
           '<span style="min-width:0"><span class="ot" style="display:block">载入示例数据</span>' +
-          '<span class="os" style="display:block">11 卷胶卷 / 9 件器材 / 7 款库存，用来看填充后的效果</span></span>' +
+          '<span class="os" style="display:block">11 卷胶卷 / 9 件器材 / 7 款库存。' +
+            '会【替换】现有数据，先用来看填充效果</span></span>' +
           '<span class="oa">' + I.right + '</span></button>' +
         '<button class="opt" data-act="wipeData">' +
           '<span class="oi">' + I.x + '</span>' +
@@ -4565,9 +4609,29 @@ document.getElementById('phone').addEventListener('click', function(e){
       break;
     }
 
+    case 'segDelete': {
+      var r3 = rollById(d.roll);
+      var di = +d.i;
+      if (!r3.segs || r3.segs.length <= 1) { toast('至少要保留一段'); break; }
+      var gone = r3.segs.splice(di, 1)[0];
+      // 删完要让剩下的分段继续盖满整卷，不留空隙
+      if (di > 0) {
+        r3.segs[di - 1].to = (di < r3.segs.length) ? r3.segs[di].from - 1 : r3.count - 1;
+      } else if (r3.segs.length) {
+        r3.segs[0].from = 0;   // 删的是第一段，后一段从第 1 格开始
+      }
+      saveDoc();
+      closeSheet();
+      render(true);
+      toast('已删除分段「' + gone.loc + '」');
+      break;
+    }
+
     case 'segAdd': {
       var r2 = rollById(d.roll);
-      var start = +d.i;
+      // 从 state 读，不要从按钮的 data-i 读 —— 那个值是弹窗渲染时烘死的，
+      // 用户改选起始格不会重渲染弹窗，读到的永远是初始值。
+      var start = state.segStart == null ? 1 : state.segStart;
       var loc = (document.getElementById('newSegLoc').value || '').trim();
       if(!loc){ toast('请填写拍摄地点'); break; }
       var prev = null;
@@ -4738,6 +4802,19 @@ document.getElementById('phone').addEventListener('click', function(e){
       break;
     }
 
+    case 'pickGear': {
+      // 从相机仓库选一个已登记的机身/镜头，填进对应的输入框
+      var gel = document.getElementById(d.field);
+      if (gel) gel.value = d.v;
+      (function(){
+        var w = t.parentNode;
+        [].forEach.call(w.children, function(b){
+          b.setAttribute('aria-pressed', b === t);
+        });
+      })();
+      break;
+    }
+
     case 'pickKind':
       state.sheetArg.kind = d.v;
       (function(){ var w = t.parentNode; [].forEach.call(w.children, function(b){
@@ -4757,6 +4834,29 @@ document.getElementById('phone').addEventListener('click', function(e){
       closeSheet();
       render(true);
       toast('设备信息已保存');
+      break;
+    }
+
+    case 'rollDelete': {
+      var rr = rollById(d.id);
+      if (!rr) break;
+      // 照片文件也删掉，不然「删除」是假的
+      var pids = (rr.photos || []).map(function(p){ return p.id; });
+      if (pids.length) Native.deletePhotos(rr.id, pids);
+      for (var ri = 0; ri < ROLLS.length; ri++) {
+        if (ROLLS[ri].id === rr.id) { ROLLS.splice(ri, 1); break; }
+      }
+      // 文件夹可能是空的，重算一遍
+      FOLDERS = [];
+      ROLLS.forEach(function(x){
+        if (x.folder && FOLDERS.indexOf(x.folder) < 0) FOLDERS.push(x.folder);
+      });
+      FOLDERS.sort();
+      saveDoc();
+      closeSheet();
+      state.screen = 'list';
+      render();
+      toast('已删除「' + (rr.film || '未命名胶卷') + '」');
       break;
     }
 
