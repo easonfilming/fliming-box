@@ -42,6 +42,15 @@ $sw = [System.Diagnostics.Stopwatch]::StartNew()
 # 不用 -x lintVitalRelease：lint { checkReleaseBuilds false } 之下这个任务
 # 根本不会被创建，-x 一个不存在的任务反而会硬失败
 & $gradle -p $root :app:assembleRelease --console=plain
+if ($LASTEXITCODE -ne 0) {
+    # Gradle 守护进程偶尔占着 dex 输出文件不放（Windows 文件锁），
+    # 表现为 mergeDexRelease 报「另一个程序正在使用此文件」。停掉守护进程重试一次。
+    Write-Output ""
+    Write-Output "  构建失败，停掉守护进程后重试一次…"
+    & $gradle -p $root --stop | Out-Null
+    Start-Sleep -Seconds 3
+    & $gradle -p $root :app:assembleRelease --console=plain
+}
 if ($LASTEXITCODE -ne 0) { throw "Gradle 构建失败（exit $LASTEXITCODE）" }
 $sw.Stop()
 Write-Output ("  耗时 " + [math]::Round($sw.Elapsed.TotalSeconds, 1) + "s")

@@ -1,13 +1,14 @@
 # -*- coding: utf-8 -*-
 """
-对原型做两道最便宜的静态检查：
+对原型做三道最便宜的静态检查。都不是完整的解析器，但每一条都对应一个
+真实踩过的坑 —— 这三类错误全都不报错，只表现为「界面有点不对劲」。
 
-1. 每个 <script> 块的括号是否平衡（不是完整 JS 解析器，但能抓住结构性错误）
+1. 每个 <script> 块的括号是否平衡
 2. 每个 data-act 是否都有对应的点击处理
-
-第 2 条曾经漏过一个：`pickFilm` 是 filmPresetChips('pickFilm') 动态生成的，
-字面量里搜不到 data-act="pickFilm"，所以最早那版检查脚本放过了它 ——
-结果是点热门胶卷预设没反应。现在把动态生成的那批也一起查。
+   （pickFilm 是 filmPresetChips('pickFilm') 动态生成的，字面量里搜不到，
+     最早的脚本因此放过了它 —— 结果是点热门胶卷预设没反应）
+3. 每个 I.xxx 图标引用是否都有定义
+   （写错会渲染成字符串 "undefined"，界面上是个突兀的灰字，不报错）
 
 用法:  python check_js.py [file.html]
 """
@@ -84,7 +85,7 @@ def check_braces(js, label):
         if c in '([{':
             st.append((c, line))
         elif c in ')]}':
-            if not st or st[0] and st[-1][0] != PAIRS[c]:
+            if not st or st[-1][0] != PAIRS[c]:
                 return '%s: 第 %d 行的 %s 对不上（栈尾 %s）' % (label, line, c, st[-3:])
             st.pop()
         i += 1
@@ -98,16 +99,28 @@ def check_acts(src):
     """所有 data-act 都要有点击处理。动态生成的那批也要算上。"""
     anchor = "document.getElementById('phone').addEventListener('click'"
     if anchor not in src:
-        return ['找不到点击监听，检查脚本需要更新']
+        return ['找不到点击监听，检查脚本需要更新'], 0
     click = src[src.index(anchor):]
-    if "document.addEventListener('keydown'" in click:
-        click = click[:click.index("document.addEventListener('keydown'")]
+    keydown = "document.addEventListener('keydown'"
+    if keydown in click:
+        click = click[:click.index(keydown)]
 
     acts = set(re.findall(r'data-act=["\']([a-zA-Z]+)', src))
     acts |= set(re.findall(r"setAttribute\('data-act',\s*'([a-zA-Z]+)'", src))
     acts |= set(re.findall(r"filmPresetChips\('([a-zA-Z]+)'\)", src))
 
     return sorted(a for a in acts if ("case '" + a + "':") not in click), len(acts)
+
+
+def check_icons(src):
+    """I.xxx 引用都要有定义 —— 写错会渲染成字符串 "undefined"。"""
+    script = src[src.rindex('<script>'):]
+    m = re.search(r'var I = \{(.*?)\n\};', script, re.S)
+    if not m:
+        return ['找不到图标表 I'], 0
+    defined = set(re.findall(r'^\s*([a-zA-Z]+)\s*:', m.group(1), re.M))
+    used = set(re.findall(r'\bI\.([a-zA-Z]+)', script))
+    return sorted(used - defined), len(defined)
 
 
 def main():
@@ -132,6 +145,13 @@ def main():
         bad += 1
     else:
         print('  OK    data-act    %5d 个，全部有处理' % total)
+
+    bad_icons, icon_total = check_icons(src)
+    if bad_icons:
+        print('  FAIL  图标用了但没定义: %s' % ', '.join(bad_icons))
+        bad += 1
+    else:
+        print('  OK    icons      %5d 个，全部有定义' % icon_total)
 
     if bad:
         sys.exit(1)

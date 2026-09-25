@@ -27,6 +27,11 @@
         <intent>
             <action android:name="android.media.action.IMAGE_CAPTURE" />
         </intent>
+        <!-- 系统照片选择器（Android 13+）。不声明的话 resolveActivity 返回 null，
+             会白白回退到文件管理器。 -->
+        <intent>
+            <action android:name="android.provider.action.PICK_IMAGES" />
+        </intent>
     </queries>
 
     <!--

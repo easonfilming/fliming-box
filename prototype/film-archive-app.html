@@ -1391,6 +1391,11 @@ h1{
 .sheet-actions.single{grid-template-columns:1fr}
 
 .opts{display:flex;flex-direction:column;gap:9px}
+/* 选中的选项：琥珀描边 + 打勾。用 .on 而不是 aria-pressed，
+   因为这组是单选卡片、不是按钮组。 */
+.opt.on{border-color:var(--am);background:rgba(229,160,58,.09)}
+.opt.on .ot{color:var(--am2)}
+.opt.on .oi{background:rgba(229,160,58,.22)}
 .opt{
   display:flex;
   align-items:center;
@@ -3608,12 +3613,6 @@ function fmtBytes(n){
   return (n / 1073741824).toFixed(2) + ' GB';
 }
 
-function keepHint(keep){
-  return keep
-    ? '原片按字节原样存进 App 私有目录，不解码不重编码。一卷 36 张扫描件可能占 2–3 GB。'
-    : '只存长边 ' + SETTINGS.displayPx + 'px 的压缩副本，一卷 36 张约 15 MB。原图留在你的相册里。';
-}
-
 /**
  * 照片数量变化后重整分段。
  *
@@ -3652,29 +3651,47 @@ function sheetImport(rollId){
   var free = fmtBytes(APP.freeBytes);
   var have = (r.photos || []).length;
 
+  function opt(v, icon, title, desc) {
+    var on = (keep === (v === '1'));
+    return '<button class="opt' + (on ? ' on' : '') + '" data-act="importKeep" data-v="' + v + '">' +
+      '<span class="oi">' + icon + '</span>' +
+      '<span style="min-width:0">' +
+        '<span class="ot" style="display:block">' + title + '</span>' +
+        '<span class="os" style="display:block">' + desc + '</span>' +
+      '</span>' +
+      '<span class="oa">' + (on ? I.check : '') + '</span>' +
+    '</button>';
+  }
+
   return '<div class="grab"></div>' +
     '<h3>导入照片</h3>' +
-    '<p class="sh-sub">从相册选择照片，按你选的顺序拼进这一卷的长条底片。' +
-      (have ? '当前已有 ' + have + ' 张，新照片会追加到末尾。' : '') + '</p>' +
+    '<p class="sh-sub">' +
+      '按你选的顺序拼进这一卷的长条底片' +
+      (have ? '。当前已有 ' + have + ' 张，新照片追加在后面' : '') + '。' +
+    '</p>' +
 
     '<div class="field">' +
       '<label>存储方式</label>' +
-      '<div class="segctl" style="width:100%">' +
-        '<button data-act="importKeep" data-v="0" aria-pressed="' + (!keep) + '" style="flex:1">仅压缩副本</button>' +
-        '<button data-act="importKeep" data-v="1" aria-pressed="' + (keep) + '" style="flex:1">保留原片</button>' +
+      '<div class="opts">' +
+        opt('0', I.dl, '仅压缩副本',
+            '长边 ' + SETTINGS.displayPx + 'px，一卷 36 张约 15 MB。原图留在相册里') +
+        opt('1', I.up, '保留原片',
+            '源文件原样再存一份，一卷 36 张可能 2–3 GB') +
       '</div>' +
-      '<div class="hint">' + I.info + '<span id="keepHint">' + keepHint(keep) + '</span></div>' +
     '</div>' +
 
     '<div class="exportmeta">' +
-      '<span>展示副本 ' + SETTINGS.displayPx + 'px</span>' +
+      (free ? '<span>剩余空间 ' + free + '</span>' : '') +
       '<span>缩略图 ' + SETTINGS.thumbPx + 'px</span>' +
-      (free ? '<span>剩余 ' + free + '</span>' : '') +
+      (r.spec ? '<span>' + r.spec + '</span>' : '') +
     '</div>' +
 
-    '<div class="sheet-actions">' +
+    '<div class="sheet-actions single" style="margin-top:16px">' +
+      '<button class="btn primary" data-act="importGo" data-roll="' + rollId + '">' +
+        I.up + '从相册选照片</button>' +
+    '</div>' +
+    '<div class="sheet-actions single" style="margin-top:8px">' +
       '<button class="btn ghost" data-act="closeSheet">取消</button>' +
-      '<button class="btn primary" data-act="importGo" data-roll="' + rollId + '">' + I.up + '选择照片</button>' +
     '</div>';
 }
 
@@ -4743,12 +4760,7 @@ document.getElementById('phone').addEventListener('click', function(e){
 
     case 'importKeep':
       state.importKeep = (d.v === '1');
-      (function(){
-        var w = t.parentNode;
-        [].forEach.call(w.children, function(b){ b.setAttribute('aria-pressed', b === t); });
-        var hint = document.getElementById('keepHint');
-        if (hint) hint.textContent = keepHint(state.importKeep);
-      })();
+      renderSheet();   // 重渲染，选中态（.on）才会跟着变
       break;
 
     case 'importGo':

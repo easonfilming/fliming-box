@@ -4,6 +4,8 @@ import android.app.Activity;
 import android.content.ActivityNotFoundException;
 import android.content.ContentResolver;
 import android.content.Intent;
+import android.os.Build;
+import android.provider.MediaStore;
 import android.database.Cursor;
 import android.net.Uri;
 import android.provider.OpenableColumns;
@@ -73,16 +75,16 @@ public class Importer {
         this.thumbPx = thumbPx > 0 ? thumbPx : 360;
         this.quality = quality > 0 ? quality : 85;
 
-        Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-        i.addCategory(Intent.CATEGORY_OPENABLE);
-        i.setType("image/*");
-        i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
-        i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        // 优先用系统的照片选择器（Android 13+）：相册式网格、支持多选，
+        // 而且不需要任何权限。ACTION_OPEN_DOCUMENT 打开的是 DocumentsUI ——
+        // 一个文件管理器，用来「从相册选照片」体验很差。
+        Intent i = photoPicker();
+        if (i == null) i = documentPicker();
 
         try {
             act.startActivityForResult(i, REQ_PICK);
         } catch (ActivityNotFoundException e) {
-            Log.w(TAG, "没有 DocumentsUI，回退 ACTION_GET_CONTENT", e);
+            Log.w(TAG, "首选选择器不可用，回退 ACTION_GET_CONTENT", e);
             Intent f = new Intent(Intent.ACTION_GET_CONTENT);
             f.addCategory(Intent.CATEGORY_OPENABLE);
             f.setType("image/*");
@@ -91,9 +93,36 @@ public class Importer {
                 act.startActivityForResult(f, REQ_PICK);
             } catch (ActivityNotFoundException e2) {
                 cb.onFinished(Collections.emptyList(),
-                        Collections.singletonList("设备上没有可用的文件选择器"), false);
+                        Collections.singletonList("设备上没有可用的照片选择器"), false);
             }
         }
+    }
+
+    /** 系统照片选择器。Android 13 以下返回 null。 */
+    private Intent photoPicker() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return null;
+        Intent i = new Intent(MediaStore.ACTION_PICK_IMAGES);
+        i.setType("image/*");
+        // 上限必须 ≤ MediaStore.getPickImagesMaxLimit()。写死一个偏大的数字
+        // （比如 500）会让选择器自己抛 IllegalArgumentException 然后立刻关掉 ——
+        // 表现是「点了没反应」，很容易误判成 Intent 根本没发出去。
+        try {
+            i.putExtra(MediaStore.EXTRA_PICK_IMAGES_MAX, MediaStore.getPickImagesMaxLimit());
+        } catch (Throwable t) {
+            Log.w(TAG, "拿不到照片选择器上限，退回单选", t);
+        }
+        if (i.resolveActivity(act.getPackageManager()) == null) return null;
+        return i;
+    }
+
+    /** 回退方案：SAF 文件选择器。任何 API 级别都不需要运行时权限。 */
+    private Intent documentPicker() {
+        Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        i.addCategory(Intent.CATEGORY_OPENABLE);
+        i.setType("image/*");
+        i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+        i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        return i;
     }
 
     public void cancel() {
@@ -111,6 +140,12 @@ public class Importer {
             cb.onFinished(Collections.emptyList(), Collections.emptyList(), true);
             return;
         }
+
+        // 记一笔选择器返回了什么。不同选择器（系统照片选择器 / SAF / 厂商定制）
+        // 把结果放在哪儿不完全一致，万一「选了照片没反应」，这条日志能直接定位。
+        Log.i(TAG, "选择器返回: resultCode=" + resultCode
+                + " clipCount=" + (data.getClipData() != null ? data.getClipData().getItemCount() : 0)
+                + " data=" + data.getData());
 
         List<Uri> uris = new ArrayList<>();
         if (data.getClipData() != null) {
