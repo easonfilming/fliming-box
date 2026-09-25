@@ -483,11 +483,26 @@ h1{
 .frbox svg{display:block;width:100%;height:100%}
 /* 真实照片铺满格位、居中裁切。合成 SVG 和真实 <img> 走同一个盒模型，
    所以底片条的几何完全不受影响。 */
-/* 照片一律 contain —— 裁掉就等于丢画面信息。底片画幅是固定的，
-   宁可留出片基色的边，也不要把画面切掉。
-   （.rowthumb 是 46×46 的小图标，另说，保持 cover。） */
-.frbox img.ph, .mini-f img.ph,
-.framebig img.ph, .wm-photo img.ph, .cs-f img.ph{
+/* 缩略视图一律 cover：把画幅填满。
+   底片画幅是固定的，扫描件本来就是这个比例（零裁切）；比例不标准的
+   （手机翻拍常见 3:4 / 9:16）裁掉一点边缘，也好过四周一圈空边。
+   装照片的盒子要能居中，竖构图兜底旋转靠它。 */
+.frbox, .mini-f, .cs-f, .framebig, .wm-photo{
+  display:grid;
+  place-items:center;
+}
+.frbox img.ph, .mini-f img.ph, .cs-f img.ph, .wm-photo img.ph{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  display:block;
+}
+/* 单帧大图是「看照片」的地方，保留完整画面。
+   底色用片基琥珀而不是近黑 —— 留边时看着像胶片，不像黑边。 */
+.framebig{
+  background:linear-gradient(180deg,#33240F,#4A3418 50%,#33240F);
+}
+.framebig img.ph{
   width:100%;
   height:100%;
   object-fit:contain;
@@ -686,7 +701,10 @@ h1{
 .row:focus-visible{outline:2px solid var(--am);outline-offset:2px}
 .rowthumb{
   flex:0 0 auto;
-  width:46px;height:46px;
+  /* 3:2 而不是正方形 —— 底片画幅就是这个比例。
+     正方形配 cover 会把画面裁掉一大半，日历和分组列表里都看不清拍的是什么。 */
+  width:68px;
+  height:45px;
   border-radius:6px;
   overflow:hidden;
   background:#0E0A06;
@@ -1543,6 +1561,38 @@ h1{
   text-align:center;
   color:var(--tx3);
   font-size:12px;
+}
+
+/* 照片调序网格 */
+.rogrid{
+  display:grid;
+  grid-template-columns:repeat(4, minmax(0,1fr));
+  gap:8px;
+}
+.ro-cell{
+  background:var(--card);
+  border:1px solid var(--bd);
+  border-radius:8px;
+  padding:0;
+  overflow:hidden;
+  cursor:pointer;
+  font-family:inherit;
+  color:inherit;
+  display:flex;
+  flex-direction:column;
+  transition:border-color .15s, background .15s;
+}
+.ro-cell.on{border-color:var(--am);background:rgba(229,160,58,.14)}
+.ro-cell:focus-visible{outline:2px solid var(--am);outline-offset:2px}
+.ro-f{display:block;width:100%;aspect-ratio:1;overflow:hidden;background:#0E0A06}
+.ro-f img.ph, .ro-f svg{display:block;width:100%;height:100%;object-fit:cover}
+.ro-n{
+  font-family:"Space Mono", monospace;
+  font-size:9px;
+  letter-spacing:.06em;
+  color:var(--am);
+  text-align:center;
+  padding:4px 0 5px;
 }
 
 /* 空状态。四个 Tab 都要有 —— 空白开始之后，没数据的页面不能是一片空白，
@@ -2617,14 +2667,22 @@ function frames(roll){
 /**
  * 一格画面。
  *
- * 竖构图在导入时就已经转成横向存下来了（见 PhotoStore.importOne），
- * 所以这里不需要任何旋转 —— 普通的 contain 就能填满画框且不裁切。
+ * 竖构图从 v0.5.0 起在导入时就转成横向存下来了（见 PhotoStore.importOne）。
+ * 这里给更早导入的照片兜底：存的还是竖的，就用 CSS 转 90°。
+ * 元素框按画框宽高互换，转完正好铺满 —— 不这么做的话，竖图在横画幅里
+ * 会被 cover 从中间裁掉一大条。
  */
-function frameInner(roll, fr, kind){
+function frameInner(roll, fr, kind, bw, bh){
   if (fr.photo) {
     var src = Native.photoUrl(roll.id, fr.photo.id, kind || 'thumbs');
     if (src) {
-      return '<img class="ph" src="' + esc(src) + '" loading="lazy" decoding="async" alt="">';
+      var pw = fr.photo.w || 1, ph = fr.photo.h || 1;
+      var style = '';
+      if (ph > pw && bw && bh && bw > bh) {
+        style = ' style="width:' + bh + 'px;height:' + bw + 'px;transform:rotate(90deg)"';
+      }
+      return '<img class="ph" src="' + esc(src) + '"' + style +
+             ' loading="lazy" decoding="async" alt="">';
     }
   }
   return sceneSVG(roll.scene, fr.seed);
@@ -2854,6 +2912,7 @@ var state = {
   importKeep:false,
   importProgress:null,
   gearTarget:'',
+  reorderPick:null,
   pendingGear:'',
   errors:[],
   toast:''
@@ -3016,6 +3075,8 @@ function viewRoll(){
     '</div>' +
 
     '<div class="sec-h"><h3>长条底片</h3><span class="rule"></span>' +
+      (frames(r).length > 1
+        ? '<button data-act="reorder" data-id="' + r.id + '">' + I.more + '调序</button>' : '') +
       '<button data-act="import" data-roll="' + r.id + '">' + I.up + '导入照片</button>' +
       '<button data-act="addSeg" data-roll="' + r.id + '">' + I.cut + '添加分段</button></div>' +
 
@@ -3171,7 +3232,7 @@ function viewGear(){
         '<span class="gearsub" style="display:block">' + esc(g.sub) + '</span>' +
         '<span class="gearmeta">' +
           '<span class="kind">' + (g.kind === 'body' ? '机身' : '镜头') + '</span>' +
-          '<span style="margin-left:auto">' + g.rolls + ' 卷</span>' +
+          '<span style="margin-left:auto">' + gearRolls(g) + ' 卷</span>' +
         '</span>' +
       '</span>' +
     '</button>';
@@ -3771,13 +3832,14 @@ function loadPhoto(url){
   });
 }
 
-/** 等比缩放到完整放进目标框（等价于 CSS object-fit:contain），不裁切。
+/** 等比铺满目标框、居中裁切（等价于 CSS object-fit:cover）。
+ *  导出的图不留边 —— 四周一圈空边在成品图里很难看。
  *  竖构图的照片在导入时已经转成横向，所以这里不用管方向。 */
 function drawFit(g, img, x, y, w, h){
   var iw = img.naturalWidth || img.width;
   var ih = img.naturalHeight || img.height;
   if (!iw || !ih) return;
-  var s = Math.min(w / iw, h / ih);
+  var s = Math.max(w / iw, h / ih);
   var dw = iw * s, dh = ih * s;
   g.drawImage(img, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh);
 }
@@ -4082,6 +4144,17 @@ window.__bridge.onExportError = function(json){
    相机仓库：选图 / 线稿
    ============================================================ */
 
+/** 这台机身/镜头实际拍了几卷 —— 从胶卷档案里数。
+ *  之前是存在 g.rolls 里的一个数字：新登记的永远是 0，删了胶卷也不会变，
+ *  跟实际情况对不上。 */
+function gearRolls(g){
+  var n = 0;
+  ROLLS.forEach(function(r){
+    if (g.kind === 'lens' ? (r.lens === g.name) : (r.camera === g.name)) n++;
+  });
+  return n;
+}
+
 /** 设备图：抠好的 PNG 优先，没有就退回手绘线稿。 */
 function gearImage(g){
   if (g.photo) {
@@ -4257,6 +4330,36 @@ function sheetFolderManage(name){
       I.info + ' 删除文件夹不会删掉里面的胶卷，它们只是不再归入文件夹。</p>';
 }
 
+function sheetReorder(rollId){
+  var r = rollById(rollId);
+  if (!r) return '';
+  var fr = frames(r);
+  if (!fr.length) return '';
+
+  var pick = state.reorderPick;
+  var cells = fr.map(function(f, i){
+    var on = (pick === i);
+    return '<button class="ro-cell' + (on ? ' on' : '') + '" data-act="reorderPick" data-i="' + i + '">' +
+      '<span class="ro-f">' + frameInner(r, f, 'thumbs', 54, 54) + '</span>' +
+      '<span class="ro-n">' + esc(f.label) + '</span>' +
+    '</button>';
+  }).join('');
+
+  return '<div class="grab"></div>' +
+    '<h3>调整照片顺序</h3>' +
+    '<p class="sh-sub">' +
+      (pick == null
+        ? '点一张选中它，再点目标位置，它就移过去。'
+        : '已选中第 ' + (pick + 1) + ' 张（' + esc(fr[pick].label) + '）。点目标位置把它移过去。') +
+    '</p>' +
+    '<div class="rogrid">' + cells + '</div>' +
+    '<p class="sh-sub" style="margin-top:16px;margin-bottom:0">' + I.info +
+      ' 分段是按位置划分的，调序后分段范围不动 —— 如果照片跨了分段，可能需要重新分段。</p>' +
+    '<div class="sheet-actions single" style="margin-top:14px">' +
+      '<button class="btn ghost" data-act="closeSheet">完成</button>' +
+    '</div>';
+}
+
 function sheetAddGear(){
   return '<div class="grab"></div>' +
     '<h3>登记设备</h3>' +
@@ -4357,7 +4460,7 @@ function sheetGear(id){
   if(!g) return '';
   return '<div class="grab"></div>' +
     '<h3>' + esc(g.name) + '</h3>' +
-    '<p class="sh-sub">' + (g.sub ? esc(g.sub) + ' · ' : '') + '已拍 ' + (g.rolls || 0) + ' 卷</p>' +
+    '<p class="sh-sub">' + (g.sub ? esc(g.sub) + ' · ' : '') + '已拍 ' + gearRolls(g) + ' 卷</p>' +
 
     '<div class="cutdemo" style="grid-template-columns:1fr">' +
       '<figure><div class="cimg">' + gearImage(g) + '</div>' +
@@ -4470,6 +4573,7 @@ function renderSheet(){
     case 'importing': h = sheetImporting(); break;
     case 'settings':  h = sheetSettings(); break;
     case 'illus':     h = sheetIllus(state.sheetArg.id); break;
+    case 'reorder':   h = sheetReorder(state.sheetArg.roll); break;
     case 'wipe':      h = sheetWipe(); break;
     case 'newFolder': h = sheetNewFolder(); break;
     case 'folderManage': h = sheetFolderManage(state.sheetArg.name); break;
@@ -4811,6 +4915,38 @@ document.getElementById('phone').addEventListener('click', function(e){
       }
       state.gearTarget = pid;
       Native.pickPhoto('');
+      break;
+    }
+
+    // ---------- 照片调序 ----------
+
+    case 'reorder':
+      state.reorderPick = null;
+      openSheet('reorder', {roll: d.id});
+      break;
+
+    case 'reorderPick': {
+      var ri = +d.i;
+      if (state.reorderPick == null) {
+        state.reorderPick = ri;          // 第一次点：选中
+        renderSheet();
+        break;
+      }
+      if (state.reorderPick === ri) {
+        state.reorderPick = null;        // 再点自己：取消选中
+        renderSheet();
+        break;
+      }
+      // 第二次点别处：把选中的那张移到目标位置
+      var ro = rollById(state.sheetArg.roll);
+      var from = state.reorderPick, to = ri;
+      var moved = ro.photos.splice(from, 1)[0];
+      ro.photos.splice(to, 0, moved);
+      state.reorderPick = null;
+      saveDoc();
+      renderSheet();
+      render(true);                      // 底下的底片条也跟着更新
+      toast('已移到第 ' + (to + 1) + ' 位');
       break;
     }
 

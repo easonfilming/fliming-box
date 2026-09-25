@@ -169,6 +169,9 @@ public class Importer {
         final AtomicInteger done = new AtomicInteger(0);
         final List<PhotoStore.Result> ok = Collections.synchronizedList(new ArrayList<>());
         final List<String> failed = Collections.synchronizedList(new ArrayList<>());
+        // 按【输入下标】预分配槽位。3 个线程并行解码，完成顺序是乱的 ——
+        // 直接往 ok 里加会让导入的照片顺序随机，不是用户选的顺序。
+        final PhotoStore.Result[] slots = new PhotoStore.Result[total];
 
         // 一次导入用一个池，跑完就关 —— 常驻池会在导入结束后白占着线程和内存
         final ExecutorService ex = Executors.newFixedThreadPool(Math.min(THREADS, total));
@@ -177,6 +180,7 @@ public class Importer {
         final String base = "p_" + rollId + "_" + Long.toString(System.currentTimeMillis(), 36);
 
         for (int i = 0; i < total; i++) {
+            final int idx = i;                    // lambda 只能捕获 effectively final 的变量
             final Uri uri = uris.get(i);
             final String pid = base + "_" + (i + 1);
             ex.execute(() -> {
@@ -186,6 +190,7 @@ public class Importer {
                 try {
                     PhotoStore.Result r = store.importOne(
                             cr, uri, pid, rollId, keepOriginal, displayPx, thumbPx, quality);
+                    slots[idx] = r;
                     ok.add(r);
                     cb.onOne(done.incrementAndGet(), total, r, null, null);
                 } catch (Exception e) {
@@ -206,7 +211,12 @@ public class Importer {
                 Thread.currentThread().interrupt();
             }
             pool = null;
-            cb.onFinished(new ArrayList<>(ok), new ArrayList<>(failed), cancelled.get());
+            // 按选择顺序交出去，不是完成顺序
+            List<PhotoStore.Result> ordered = new ArrayList<>();
+            for (PhotoStore.Result r : slots) {
+                if (r != null) ordered.add(r);
+            }
+            cb.onFinished(ordered, new ArrayList<>(failed), cancelled.get());
         }, "import-finish").start();
     }
 
