@@ -369,6 +369,20 @@ h1{
   margin:0;
 }
 .chiprow::-webkit-scrollbar{height:0}
+
+/* 预设按品牌分组：一家一行，各自横向滚动。
+   六十来款挤在一条滚动条里翻起来太累。 */
+.brandrow{display:flex;align-items:flex-start;gap:9px;margin-top:9px}
+.brandrow:first-child{margin-top:0}
+.brandname{
+  flex:0 0 auto;
+  width:40px;
+  padding-top:7px;
+  font-size:10px;
+  letter-spacing:.08em;
+  color:var(--tx3);
+}
+.brandrow .chiprow{flex:1;min-width:0;padding-bottom:0}
 .chip{
   flex:0 0 auto;
   border:1px solid var(--bd);
@@ -1218,7 +1232,8 @@ h1{
 
 .stockstats{
   display:grid;
-  grid-template-columns:repeat(3, minmax(0,1fr));
+  /* 4 格：库存 / 款数·批次 / 临近过期 / 冷冻。格子窄了，字号和留白跟着收 */
+  grid-template-columns:repeat(4, minmax(0,1fr));
   gap:1px;
   background:var(--bd);
   border:1px solid var(--bd);
@@ -1226,8 +1241,8 @@ h1{
   overflow:hidden;
   margin:0 18px 14px;
 }
-.stockstats>div{background:var(--card);padding:12px 13px;min-width:0}
-.stockstats .k{font-size:10px;letter-spacing:.1em;color:var(--tx3);margin-bottom:6px}
+.stockstats>div{background:var(--card);padding:12px 10px;min-width:0}
+.stockstats .k{font-size:10px;letter-spacing:.06em;color:var(--tx3);margin-bottom:6px}
 .stockstats .v{
   font-family:"Space Mono", monospace;
   font-size:21px;
@@ -1236,6 +1251,7 @@ h1{
   font-variant-numeric:tabular-nums;
 }
 .stockstats>div.warn .v{color:var(--rust)}
+.stockstats>div.cold .v{color:var(--cold)}
 .sorthint{
   margin:0 18px 12px;
   font-family:"Space Mono", monospace;
@@ -1309,6 +1325,20 @@ h1{
 }
 .expchip.u{background:rgba(210,85,58,.16);border-color:rgba(210,85,58,.5);color:#F08A72}
 .expchip.s{background:rgba(229,160,58,.14);border-color:rgba(229,160,58,.44);color:var(--am2)}
+
+/* 存储方式。常温是中性色 —— 大多数胶卷就在常温，不该抢眼；
+   冷冻用冷色，扫一眼列表就知道哪些在冰柜里。 */
+.storechip{
+  flex:0 0 auto;
+  font-size:10px;
+  letter-spacing:.06em;
+  padding:2px 7px;
+  border-radius:100px;
+  border:1px solid var(--bd2);
+  color:var(--tx3);
+  white-space:nowrap;
+}
+.storechip.frozen{background:var(--coldbg);border-color:var(--coldbd);color:var(--cold)}
 .urgbar{
   display:block;
   height:3px;
@@ -1945,6 +1975,7 @@ html[data-theme="darkroom"] .phone{
   --tx:#F1E7D7;  --tx2:#A48F76;  --tx3:#6E5D4A;
   --am:#E5A03A;  --am2:#F5C173;
   --rust:#D2553A; --sage:#8AA06E;
+  --cold:#7FB0CC; --coldbd:rgba(127,176,204,.5); --coldbg:rgba(127,176,204,.13);
   --filmb:#2E2015; --filmb2:#3E2C1A;
 }
 html[data-theme="paper"] .phone{
@@ -1953,6 +1984,7 @@ html[data-theme="paper"] .phone{
   --tx:#241C14;  --tx2:#5C4E3C;  --tx3:#8A7860;
   --am:#A96C12;  --am2:#8A5708;
   --rust:#9E3418; --sage:#55663F;
+  --cold:#2F6383; --coldbd:rgba(47,99,131,.45); --coldbg:rgba(47,99,131,.1);
   --filmb:#2E2015; --filmb2:#3E2C1A;
 }
 /* 让原生控件（date picker、滚动条）跟着换 */
@@ -2615,13 +2647,13 @@ var SAMPLE_GEAR = [
 ];
 
 var SAMPLE_STOCK = [
-  {name:'ILFORD DELTA 3200', spec:'135', iso:3200, qty:2,  exp:'2026-09'},
-  {name:'KODAK EKTAR 100',   spec:'135', iso:100,  qty:1,  exp:'2026-10'},
-  {name:'FUJI PRO 400H',     spec:'120', iso:400,  qty:2,  exp:'2026-11'},
-  {name:'KODAK GOLD 200',    spec:'135', iso:200,  qty:4,  exp:'2026-12'},
-  {name:'FUJI VELVIA 50',    spec:'120', iso:50,   qty:3,  exp:'2027-05'},
-  {name:'KODAK PORTRA 400',  spec:'135', iso:400,  qty:5,  exp:'2027-08'},
-  {name:'ILFORD HP5 PLUS',   spec:'135', iso:400,  qty:10, exp:'2028-03'}
+  {name:'ILFORD DELTA 3200 PROFESSIONAL', spec:'135', iso:3200, qty:2,  exp:'2026-09', store:'room'},
+  {name:'KODAK EKTAR 100',                spec:'135', iso:100,  qty:1,  exp:'2026-10', store:'room'},
+  {name:'FUJIFILM PRO 400H',              spec:'120', iso:400,  qty:2,  exp:'2026-11', store:'room'},
+  {name:'KODAK GOLD 200',                 spec:'135', iso:200,  qty:4,  exp:'2026-12', store:'room'},
+  {name:'FUJIFILM VELVIA 50',             spec:'120', iso:50,   qty:3,  exp:'2027-05', store:'frozen'},
+  {name:'KODAK PORTRA 400',               spec:'135', iso:400,  qty:5,  exp:'2027-08', store:'frozen'},
+  {name:'ILFORD HP5 PLUS',                spec:'135', iso:400,  qty:10, exp:'2028-03', store:'frozen'}
 ];
 
 /* ============================================================
@@ -2761,6 +2793,25 @@ function daysLeft(exp){
   return Math.round((end - TODAY) / 86400000);
 }
 function expLevel(d){ return d <= 30 ? 'u' : (d <= 90 ? 's' : ''); }
+
+/* 存储方式。常温 / 冷冻 —— 冷冻能显著延长保质期，是胶片玩家实际会记的
+   一件事：哪些在冰柜里、哪些随手能拿。 */
+var STORE_WAYS = [['room','常温'],['frozen','冷冻']];
+function storeLabel(k){ return k === 'frozen' ? '冷冻' : '常温'; }
+
+/** 读一个 segctl 当前选中的值。
+ *  用户可能在弹窗里改过选项，确认时要从 DOM 读 —— 渲染时算好的快照
+ *  永远是初始值，这是踩过的坑。 */
+function segValue(id){
+  var w = document.getElementById(id);
+  if (!w) return null;
+  for (var i = 0; i < w.children.length; i++) {
+    if (w.children[i].getAttribute('aria-pressed') === 'true') {
+      return w.children[i].getAttribute('data-v');
+    }
+  }
+  return null;
+}
 function expWord(d){
   if(d < 0) return '已过期';
   if(d === 0) return '今日到期';
@@ -3289,6 +3340,7 @@ function viewGear(){
 function viewStock(){
   var total = STOCK.reduce(function(a,s){ return a + s.qty; }, 0);
   var urgent = STOCK.filter(function(s){ return daysLeft(s.exp) <= 90; }).length;
+  var frozen = STOCK.reduce(function(a,s){ return a + (s.store === 'frozen' ? s.qty : 0); }, 0);
   // 同一款胶卷可能有多个批次（不同过期时间），款数要按型号去重
   var kinds = {};
   STOCK.forEach(function(s){ kinds[s.name + '|' + s.spec] = 1; });
@@ -3308,6 +3360,8 @@ function viewStock(){
       '</span>' +
       '<span class="sr-mid">' +
         '<span class="iso">ISO ' + s.iso + '</span>' +
+        '<span class="storechip' + (s.store === 'frozen' ? ' frozen' : '') + '">' +
+          storeLabel(s.store) + '</span>' +
         '<i class="dotsep"></i>' +
         '<span>过期 ' + s.exp.replace('-', '.') + '</span>' +
         '<span class="expchip ' + lvl + '">' + expWord(d) + '</span>' +
@@ -3326,13 +3380,14 @@ function viewStock(){
       '<div><div class="k">款数 / 批次</div><div class="v">' + kindCount +
         '<u>/ ' + STOCK.length + '</u></div></div>' +
       '<div class="warn"><div class="k">临近过期</div><div class="v">' + urgent + '</div></div>' +
+      '<div class="cold"><div class="k">冷冻</div><div class="v">' + frozen + '</div></div>' +
     '</div>' +
     '<div class="sorthint">' + I.sortup + '按过期时间由近到远 · 临近过期优先展示</div>' +
     (STOCK.length
       ? '<div class="stocklist">' + rows + '</div>'
       : emptyState('库存是空的', [
           '记录每款胶卷的数量和过期时间，列表会按过期时间由近到远排序。',
-          '新增时可以从 29 款热门胶卷预设里点选，规格和 ISO 一次填好。'
+          '新增时可以从 ' + presetCount() + ' 款热门胶卷预设里点选，规格和 ISO 一次填好。'
         ], '登记第一款胶卷', 'addStock')) +
     '<div style="height:84px"></div>';
 }
@@ -3435,50 +3490,118 @@ function sheetIllus(targetId){
 }
 
 /* ============================================================
-   热门胶卷预设
+   热门胶卷预设，按品牌分组
    ============================================================
+   型号一律用厂商印在盒子上的官方名 —— FUJIFILM 而不是 FUJI、KONICA
+   CENTURIA 而不是「柯尼卡世纪彩」。这一栏填的就是档案里的胶卷型号，
+   名字得跟盒子对得上，将来翻出来才知道当时用的到底是哪一款。
+
    只是快捷方式，不是白名单 —— 型号输入框仍然是自由文本，随时可以手输。
    选中会同时填好规格和 ISO：只填型号的话用户还得自己补另两项，
    而这两项本来就是胶卷的固有属性，没必要让人再打一遍。
+
+   分组是因为款数上去了：六十来款挤在一条横向滚动条里翻起来太累，
+   一家一行、各自短滚动，找起来快得多。
    ============================================================ */
-var FILM_PRESETS = [
-  { n:'KODAK PORTRA 400',     s:'135', iso:400  },
-  { n:'KODAK PORTRA 160',     s:'135', iso:160  },
-  { n:'KODAK EKTAR 100',      s:'135', iso:100  },
-  { n:'KODAK GOLD 200',       s:'135', iso:200  },
-  { n:'KODAK ULTRA MAX 400',  s:'135', iso:400  },
-  { n:'KODAK COLORPLUS 200',  s:'135', iso:200  },
-  { n:'KODAK TRI-X 400',      s:'135', iso:400  },
-  { n:'KODAK T-MAX 400',      s:'135', iso:400  },
-  { n:'KODAK T-MAX 100',      s:'135', iso:100  },
-  { n:'ILFORD HP5 PLUS',      s:'135', iso:400  },
-  { n:'ILFORD FP4 PLUS',      s:'135', iso:125  },
-  { n:'ILFORD DELTA 3200',    s:'135', iso:3200 },
-  { n:'ILFORD DELTA 100',     s:'135', iso:100  },
-  { n:'ILFORD XP2 SUPER',     s:'135', iso:400  },
-  { n:'ILFORD PAN F PLUS',    s:'135', iso:50   },
-  { n:'FUJI PRO 400H',        s:'120', iso:400  },
-  { n:'FUJI VELVIA 50',       s:'120', iso:50   },
-  { n:'FUJI PROVIA 100F',     s:'120', iso:100  },
-  { n:'FUJI ACROS 100 II',    s:'135', iso:100  },
-  { n:'FUJI SUPERIA 400',     s:'135', iso:400  },
-  { n:'FUJI C200',            s:'135', iso:200  },
-  { n:'CINE STILL 800T',      s:'135', iso:800  },
-  { n:'CINE STILL 50D',       s:'135', iso:50   },
-  { n:'LOMO CN 400',          s:'135', iso:400  },
-  { n:'KENTMERE 400',         s:'135', iso:400  },
-  { n:'AGFA VISTA 200',       s:'135', iso:200  },
-  { n:'乐凯 SHD 100',          s:'135', iso:100  },
-  { n:'上海 GP3 100',          s:'120', iso:100  },
-  { n:'公元 ERA 100',          s:'120', iso:100  }
+var FILM_BRANDS = [
+  { b:'柯达', list:[
+    { n:'KODAK PORTRA 400',       s:'135', iso:400  },
+    { n:'KODAK PORTRA 160',       s:'135', iso:160  },
+    { n:'KODAK PORTRA 800',       s:'135', iso:800  },
+    { n:'KODAK EKTAR 100',        s:'135', iso:100  },
+    { n:'KODAK GOLD 200',         s:'135', iso:200  },
+    { n:'KODAK COLORPLUS 200',    s:'135', iso:200  },
+    { n:'KODAK ULTRA MAX 400',    s:'135', iso:400  },
+    { n:'KODAK PRO IMAGE 100',    s:'135', iso:100  },
+    { n:'KODAK EKTACHROME E100',  s:'135', iso:100  },
+    { n:'KODAK TRI-X 400',        s:'135', iso:400  },
+    { n:'KODAK T-MAX 100',        s:'135', iso:100  },
+    { n:'KODAK T-MAX 400',        s:'135', iso:400  },
+    { n:'KODAK T-MAX P3200',      s:'135', iso:3200 }
+  ]},
+  { b:'富士', list:[
+    { n:'FUJIFILM PRO 400H',            s:'120', iso:400  },
+    { n:'FUJIFILM PROVIA 100F',         s:'120', iso:100  },
+    { n:'FUJIFILM PROVIA 400X',         s:'135', iso:400  },
+    { n:'FUJIFILM VELVIA 50',           s:'120', iso:50   },
+    { n:'FUJIFILM VELVIA 100',          s:'135', iso:100  },
+    { n:'FUJIFILM NEOPAN 100 ACROS II', s:'135', iso:100  },
+    { n:'FUJIFILM SUPERIA X-TRA 400',   s:'135', iso:400  },
+    { n:'FUJIFILM SUPERIA PREMIUM 400', s:'135', iso:400  },
+    { n:'FUJIFILM C200',                s:'135', iso:200  },
+    { n:'FUJIFILM ETERNA 500T',         s:'135', iso:500  }
+  ]},
+  { b:'伊尔福', list:[
+    { n:'ILFORD HP5 PLUS',                s:'135', iso:400  },
+    { n:'ILFORD FP4 PLUS',                s:'135', iso:125  },
+    { n:'ILFORD PAN F PLUS',              s:'135', iso:50   },
+    { n:'ILFORD DELTA 100 PROFESSIONAL',  s:'135', iso:100  },
+    { n:'ILFORD DELTA 400 PROFESSIONAL',  s:'135', iso:400  },
+    { n:'ILFORD DELTA 3200 PROFESSIONAL', s:'135', iso:3200 },
+    { n:'ILFORD XP2 SUPER',               s:'135', iso:400  },
+    { n:'ILFORD SFX 200',                 s:'135', iso:200  },
+    { n:'ILFORD ORTHO PLUS',              s:'135', iso:80   },
+    { n:'ILFORD PAN 100',                 s:'135', iso:100  },
+    { n:'ILFORD PAN 400',                 s:'135', iso:400  }
+  ]},
+  { b:'柯尼卡', list:[
+    { n:'KONICA CENTURIA 100', s:'135', iso:100 },
+    { n:'KONICA CENTURIA 200', s:'135', iso:200 },
+    { n:'KONICA CENTURIA 400', s:'135', iso:400 },
+    { n:'KONICA CENTURIA 800', s:'135', iso:800 },
+    { n:'KONICA VX 200',       s:'135', iso:200 },
+    { n:'KONICA VX 400',       s:'135', iso:400 }
+  ]},
+  { b:'爱克发', list:[
+    { n:'AGFA VISTA 100',      s:'135', iso:100 },
+    { n:'AGFA VISTA 200',      s:'135', iso:200 },
+    { n:'AGFA VISTA 400',      s:'135', iso:400 },
+    { n:'AGFA ULTRA 100',      s:'135', iso:100 },
+    { n:'AGFA PRECISA 100',    s:'135', iso:100 },
+    { n:'AGFA CT PRECISA 100', s:'135', iso:100 },
+    { n:'AGFA RSX II 100',     s:'135', iso:100 },
+    { n:'AGFA APX 100',        s:'135', iso:100 },
+    { n:'AGFA APX 400',        s:'135', iso:400 }
+  ]},
+  { b:'乐凯', list:[
+    { n:'乐凯 SHD 100',  s:'135', iso:100 },
+    { n:'乐凯 SHD 400',  s:'135', iso:400 },
+    { n:'乐凯 彩韵 200', s:'135', iso:200 },
+    { n:'乐凯 彩韵 400', s:'135', iso:400 }
+  ]},
+  { b:'其他', list:[
+    { n:'CineStill 800T', s:'135', iso:800 },
+    { n:'CineStill 50D',  s:'135', iso:50  },
+    { n:'LOMO CN 400',    s:'135', iso:400 },
+    { n:'KENTMERE 400',   s:'135', iso:400 },
+    { n:'上海 GP3 100',   s:'120', iso:100 },
+    { n:'公元 ERA 100',   s:'120', iso:100 }
+  ]}
 ];
 
-/** 预设 chip 行。act 是点击后触发的 data-act，两个弹窗共用。 */
-function filmPresetChips(act){
-  return FILM_PRESETS.map(function(p){
+/** 预设总数 —— 空状态里要写「从 N 款里点选」，写死数字迟早对不上。 */
+function presetCount(){
+  var n = 0;
+  FILM_BRANDS.forEach(function(g){ n += g.list.length; });
+  return n;
+}
+
+/** 一组 chip。act 是点击后触发的 data-act，两个弹窗共用。 */
+function filmPresetChips(act, list){
+  return list.map(function(p){
     return '<button class="chip" data-act="' + act + '"' +
       ' data-n="' + esc(p.n) + '" data-s="' + p.s + '" data-iso="' + p.iso + '">' +
       esc(p.n) + '</button>';
+  }).join('');
+}
+
+/** 按品牌分组的一整块预设。一家一行，各自横向滚动。 */
+function filmPresetBlock(act){
+  return FILM_BRANDS.map(function(g){
+    return '<div class="brandrow">' +
+      '<span class="brandname">' + g.b + '</span>' +
+      '<div class="chiprow">' + filmPresetChips(act, g.list) + '</div>' +
+    '</div>';
   }).join('');
 }
 
@@ -3508,7 +3631,7 @@ function sheetEditRoll(rollId){
     '</div>' +
     '<div class="field">' +
       '<label>热门胶卷 · 点一下自动填好规格和 ISO</label>' +
-      '<div class="chiprow">' + filmPresetChips('pickFilm') + '</div>' +
+      filmPresetBlock('pickFilm') +
     '</div>' +
     '<div class="fieldrow">' +
       '<div class="field"><label>胶卷规格</label>' +
@@ -4488,6 +4611,7 @@ function sheetAddGear(){
 
 function sheetAddStock(){
   var spec = (state.sheetArg && state.sheetArg.spec) || '135';
+  var store = (state.sheetArg && state.sheetArg.store) || 'room';
   return '<div class="grab"></div>' +
     '<h3>新增库存胶卷</h3>' +
     '<p class="sh-sub">记录数量与过期时间，列表会自动按过期时间由近到远排序。</p>' +
@@ -4499,7 +4623,7 @@ function sheetAddStock(){
 
     '<div class="field">' +
       '<label>热门胶卷 · 点一下自动填好规格和 ISO</label>' +
-      '<div class="chiprow">' + filmPresetChips('pickFilm') + '</div>' +
+      filmPresetBlock('pickFilm') +
     '</div>' +
 
     '<div class="fieldrow">' +
@@ -4516,6 +4640,18 @@ function sheetAddStock(){
       '<label for="sExp">过期时间</label>' +
       '<input type="date" id="sExp" value="' + defaultExp() + '">' +
       '<div class="hint">' + I.info + '过期前 90 天开始提醒，30 天内标红。</div>' +
+    '</div>' +
+
+    '<div class="field">' +
+      '<label>存储方式</label>' +
+      '<div class="segctl" id="sStore" style="width:100%">' +
+        STORE_WAYS.map(function(w){
+          return '<button data-act="pickStore" data-v="' + w[0] + '" aria-pressed="' +
+            ((store || 'room') === w[0]) + '" style="flex:1">' + w[1] + '</button>';
+        }).join('') +
+      '</div>' +
+      '<div class="hint">' + I.info + '冷冻能显著延长保质期，常温方便随时取用。' +
+        '同一批分开存放会记成两条，方便分别看。</div>' +
     '</div>' +
 
     '<div class="sheet-actions">' +
@@ -4539,12 +4675,22 @@ function sheetStockItem(id){
   var d = daysLeft(s.exp);
   return '<div class="grab"></div>' +
     '<h3>' + esc(s.name) + '</h3>' +
-    '<p class="sh-sub">' + s.spec + ' · ISO ' + s.iso + ' · 库存 ' + s.qty + ' 卷</p>' +
+    '<p class="sh-sub">' + s.spec + ' · ISO ' + s.iso + ' · 库存 ' + s.qty + ' 卷 · ' +
+      storeLabel(s.store) + '</p>' +
     '<div class="metagrid">' +
       '<div><div class="k">过期时间</div><div class="v mono">' + s.exp.replace('-','.') + '</div></div>' +
       '<div><div class="k">剩余</div><div class="v mono">' + expWord(d) + '</div></div>' +
       '<div><div class="k">规格</div><div class="v mono">' + s.spec + '</div></div>' +
       '<div><div class="k">感光度</div><div class="v mono">ISO ' + s.iso + '</div></div>' +
+    '</div>' +
+    '<div class="field">' +
+      '<label>存储方式</label>' +
+      '<div class="segctl" id="stStore" style="width:100%">' +
+        STORE_WAYS.map(function(w){
+          return '<button data-act="pickStore" data-v="' + w[0] + '" aria-pressed="' +
+            ((s.store || 'room') === w[0]) + '" style="flex:1">' + w[1] + '</button>';
+        }).join('') +
+      '</div>' +
     '</div>' +
     '<div class="field">' +
       '<label for="stQty">调整数量</label>' +
@@ -4553,7 +4699,7 @@ function sheetStockItem(id){
     '<div class="sheet-actions">' +
       '<button class="btn ghost" data-act="stockDelete" data-id="' + esc(s.id) + '">删除这批</button>' +
       '<button class="btn primary" data-act="stockUpdate" data-id="' + esc(s.id) + '">' +
-        I.check + '更新数量</button>' +
+        I.check + '保存修改</button>' +
     '</div>';
 }
 
@@ -5174,11 +5320,14 @@ document.getElementById('phone').addEventListener('click', function(e){
       var qEl = document.getElementById('stQty');
       var q = parseInt(qEl ? qEl.value : '', 10);
       if (!q || q < 1) { toast('数量至少为 1'); break; }
+      var stv = segValue('stStore') || 'room';
+      var moved = (stu.store || 'room') !== stv;
       stu.qty = q;
+      stu.store = stv;
       saveDoc();
       closeSheet();
       render(true);
-      toast('已更新为 ' + q + ' 卷');
+      toast(moved ? ('已改为' + storeLabel(stv) + '存放 · ' + q + ' 卷') : ('已更新为 ' + q + ' 卷'));
       break;
     }
 
@@ -5267,6 +5416,13 @@ document.getElementById('phone').addEventListener('click', function(e){
         b.setAttribute('aria-pressed', b === t); }); })();
       break;
 
+    case 'pickStore':
+      if (!state.sheetArg) state.sheetArg = {};
+      state.sheetArg.store = d.v;
+      (function(){ var w = t.parentNode; [].forEach.call(w.children, function(b){
+        b.setAttribute('aria-pressed', b === t); }); })();
+      break;
+
     case 'pickFilm': {
       // 预设只是快捷方式：填型号、规格、ISO，之后照样能改
       var fi = document.getElementById('fFilm') || document.getElementById('sName');
@@ -5300,14 +5456,18 @@ document.getElementById('phone').addEventListener('click', function(e){
 
       var sp = (state.sheetArg && state.sheetArg.spec) || '135';
       var iso = (state.sheetArg && state.sheetArg.iso) || 400;
+      var st = segValue('sStore') || 'room';
 
-      // 只有「型号 + 规格 + 过期时间」三者全一样才累加。
+      // 只有「型号 + 规格 + 过期时间 + 存储方式」四者全一样才累加。
       //
       // 过期时间是批次标识：同一款胶卷不同批次（2023 年买的一批 2026 到期、
       // 2025 年又买一批 2028 到期）必须分开显示 —— 合并了就看不出哪批该先用。
+      // 存储方式同理：同一批里一部分丢冷冻、一部分留常温是常事，
+      // 合并了就看不出哪些在冰柜里。
       var found = null;
       for (var si = 0; si < STOCK.length; si++) {
-        if (STOCK[si].name === nm && STOCK[si].spec === sp && STOCK[si].exp === exp) {
+        if (STOCK[si].name === nm && STOCK[si].spec === sp && STOCK[si].exp === exp &&
+            (STOCK[si].store || 'room') === st) {
           found = STOCK[si]; break;
         }
       }
@@ -5317,7 +5477,7 @@ document.getElementById('phone').addEventListener('click', function(e){
       } else {
         STOCK.push({
           id: 's' + Date.now().toString(36) + Math.floor(Math.random() * 1000),
-          name: nm, spec: sp, iso: iso, qty: qty, exp: exp
+          name: nm, spec: sp, iso: iso, qty: qty, exp: exp, store: st
         });
         toast('已加入 ' + nm + ' ×' + qty);
       }

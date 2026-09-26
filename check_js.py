@@ -5,7 +5,7 @@
 
 1. 每个 <script> 块的括号是否平衡
 2. 每个 data-act 是否都有对应的点击处理
-   （pickFilm 是 filmPresetChips('pickFilm') 动态生成的，字面量里搜不到，
+   （pickFilm 是 filmPresetBlock('pickFilm') 动态生成的，字面量里搜不到，
      最早的脚本因此放过了它 —— 结果是点热门胶卷预设没反应）
 3. 每个 I.xxx 图标引用是否都有定义
    （写错会渲染成字符串 "undefined"，界面上是个突兀的灰字，不报错）
@@ -107,7 +107,7 @@ def check_acts(src):
 
     acts = set(re.findall(r'data-act=["\']([a-zA-Z]+)', src))
     acts |= set(re.findall(r"setAttribute\('data-act',\s*'([a-zA-Z]+)'", src))
-    acts |= set(re.findall(r"filmPresetChips\('([a-zA-Z]+)'\)", src))
+    acts |= set(re.findall(r"filmPreset(?:Chips|Block)\('([a-zA-Z]+)'", src))
 
     return sorted(a for a in acts if ("case '" + a + "':") not in click), len(acts)
 
