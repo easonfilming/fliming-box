@@ -1351,6 +1351,89 @@ h1{
 .urgbar.u i{background:var(--rust)}
 .urgbar.s i{background:var(--am)}
 
+/* ---------- 机身里那卷胶卷 ---------- */
+/* 列表卡片上的一条窄带。整张卡是 <button>，里面不能再放按钮，
+   所以卡片上只显示、不可点；动作都在机身详情里。 */
+.loadband{display:block;margin-top:8px}
+.lb-film{
+  display:block;
+  font-family:"Space Mono", monospace;
+  font-size:10.5px;
+  letter-spacing:.04em;
+  color:var(--tx2);
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.lb-bar{
+  display:block;
+  height:3px;
+  border-radius:3px;
+  background:var(--bd);
+  margin-top:7px;
+  overflow:hidden;
+}
+.lb-bar i{display:block;height:100%;border-radius:3px;background:var(--tx3)}
+/* 拍满了才上色 —— 跟库存那根过期条一个道理：平时是中性色，该管的时候才跳出来 */
+.lb-bar.done i{background:var(--am)}
+.gearmeta .lb-n{
+  margin-left:auto;
+  flex:0 0 auto;
+  font-variant-numeric:tabular-nums;
+}
+.gearmeta .lb-n.done{color:var(--am)}
+
+/* 机身详情里的状态面板 */
+.loadpanel{
+  border:1px solid var(--bd);
+  border-radius:12px;
+  background:var(--card);
+  padding:13px 14px 12px;
+  margin-bottom:18px;
+}
+.loadpanel.done{border-color:var(--am)}
+.loadpanel.empty{
+  border-style:dashed;
+  background:none;
+  text-align:center;
+  padding:20px 14px;
+}
+.lp-empty{font-size:12.5px;color:var(--tx3);margin-bottom:12px}
+.lp-head{display:flex;align-items:baseline;gap:10px}
+.lp-film{
+  flex:1;
+  min-width:0;
+  font-family:"Space Mono", monospace;
+  font-size:12.5px;
+  letter-spacing:.04em;
+  color:var(--tx);
+  overflow-wrap:anywhere;
+}
+.lp-count{
+  flex:0 0 auto;
+  font-family:"Space Mono", monospace;
+  font-size:19px;
+  line-height:1;
+  color:var(--tx);
+  font-variant-numeric:tabular-nums;
+}
+.lp-count u{text-decoration:none;font-size:11.5px;color:var(--tx3);margin-left:1px}
+.lp-count.done{color:var(--am)}
+.lp-count.done u{color:var(--am)}
+.loadpanel .lb-bar{margin-top:11px}
+.lp-sub{
+  display:flex;
+  align-items:center;
+  gap:7px;
+  flex-wrap:wrap;
+  font-size:11px;
+  color:var(--tx3);
+  margin-top:9px;
+}
+.lp-acts{display:grid;grid-template-columns:1.5fr 1fr 1fr;gap:8px;margin-top:13px}
+.lp-acts .btn{padding:9px 6px;font-size:12px;gap:5px}
+.lp-acts .btn svg{width:13px;height:13px}
+
 /* ============================================================
    SHEETS
    ============================================================ */
@@ -2635,9 +2718,11 @@ var SAMPLE_ROLLS = [
 ];
 
 var SAMPLE_GEAR = [
-  {id:'g1', kind:'body', name:'Nikon FM2', sub:'F 卡口 · 1989', rolls:14, ill:'slr'},
+  {id:'g1', kind:'body', name:'Nikon FM2', sub:'F 卡口 · 1989', rolls:14, ill:'slr',
+    load:{film:'KODAK PORTRA 400', spec:'135', iso:400, total:36, shot:23, since:'2026-08-30'}},
   {id:'g2', kind:'body', name:'Leica M6 Classic', sub:'M 卡口 · 1992', rolls:9, ill:'rf'},
-  {id:'g3', kind:'body', name:'Mamiya RB67 Pro SD', sub:'中画幅 6×7 · 1990', rolls:5, ill:'slr'},
+  {id:'g3', kind:'body', name:'Mamiya RB67 Pro SD', sub:'中画幅 6×7 · 1990', rolls:5, ill:'slr',
+    load:{film:'ILFORD HP5 PLUS', spec:'120', iso:400, total:10, shot:10, since:'2026-09-02'}},
   {id:'g4', kind:'body', name:'Rolleiflex 3.5F', sub:'双反 6×6 · 1960', rolls:3, ill:'tlr'},
   {id:'g5', kind:'body', name:'海鸥 4B', sub:'双反 6×6 · 1972', rolls:2, ill:'tlr'},
   {id:'g6', kind:'lens', name:'Nikkor 50mm f/1.4 AI-S', sub:'F 卡口 · 1981', rolls:12, ill:'lens'},
@@ -2686,7 +2771,10 @@ function loadSamples(){
   });
 }
 
-var TODAY = new Date(2026, 8, 24);
+/* 库存过期天数的基准日。以前这里写死成 2026-09-24（做演示时冻住的
+   那天），结果是「还剩几天过期」永远按那天算，越用越不准。改成真实
+   当下 —— 这个 App 现在是拿来记自己胶卷的。 */
+var TODAY = new Date();
 
 /* ============================================================
    helpers
@@ -2980,8 +3068,9 @@ var state = {
   rollId:null,
   listMode:'time',
   folder:null,
-  calY:2026,
-  calM:8,
+  // 日历默认停在当月。以前写死 2026 年 8 月（同样是演示期冻住的）
+  calY:new Date().getFullYear(),
+  calM:new Date().getMonth(),
   calDay:null,
   gearKind:'all',
   sheet:null,
@@ -3297,12 +3386,113 @@ function viewCalendar(){
     '<div class="scrollpad">' + listHTML + '</div>';
 }
 
+/* ============================================================
+   机身里那卷胶卷
+   ============================================================
+   一台机身里装的是什么、能拍多少张、已经拍了多少张。只记在机身
+   （kind === 'body'）上 —— 镜头没有胶卷仓。
+
+   这里**不碰**胶卷仓库的库存。装卷不等于出库，卸卷也不等于退库：
+   库存记的是「柜子里还有几卷」，机身记的是「这台现在在用哪一卷」，
+   合在一起算早晚会算错（一机一卷在拍，仓库那边却也扣掉了，回头
+   冲扫完到底该不该退？）。所以两边各记各的，只在界面上互相提一句。
+   ============================================================ */
+
+/** 机身里那卷。没装、或者不是机身，都返回 null。 */
+function gearLoad(g){
+  return (g && g.kind === 'body' && g.load) ? g.load : null;
+}
+function loadDone(L){ return !!L && L.shot >= L.total; }
+/** 进度百分比。拍超了也只画满，不溢出。 */
+function loadPct(L){
+  if (!L || !L.total) return 0;
+  return Math.max(0, Math.min(100, Math.round(L.shot / L.total * 100)));
+}
+/** 有几台机身正装着胶卷。 */
+function loadedBodies(){
+  var c = 0;
+  GEAR.forEach(function(g){ if (gearLoad(g)) c++; });
+  return c;
+}
+/** 装卷至今多少天。用真实当下，不复用 TODAY —— 那一个是给库存算过期用的
+   基准日（写死过 2026-09-24，现在虽然也是当下，但两者的用途不该混）。 */
+function loadDays(L){
+  if (!L || !L.since) return null;
+  var p = L.since.split('-');
+  if (p.length !== 3) return null;
+  var d0 = new Date(+p[0], +p[1] - 1, +p[2]);
+  return Math.floor((new Date() - d0) / 86400000);
+}
+/** 装卷日期的短写法：2026-09-20 → 09.20 */
+function loadSince(L){
+  return (L && L.since && L.since.length >= 10) ? L.since.slice(5).replace('-', '.') : '';
+}
+
+/** 从型号名里猜感光度 —— 多数胶卷名字里就带着（PORTRA 400、EKTA 100、
+   T-MAX P3200）。取最靠后的那个数，ISO 一般写在末尾。猜不到返回 0。 */
+function guessIso(name){
+  var m = String(name || '').match(/\d{2,4}/g);
+  if (!m) return 0;
+  for (var i = m.length - 1; i >= 0; i--) {
+    var v = parseInt(m[i], 10);
+    if (v >= 25 && v <= 3200) return v;
+  }
+  return 0;
+}
+
+/** 仓库里这款还有几卷。装卷弹窗拿它做提示 —— 只看，不减。 */
+function stockHave(name){
+  if (!name) return null;
+  var all = 0, cold = 0;
+  STOCK.forEach(function(s){
+    if (s.name !== name) return;
+    all += s.qty;
+    if (s.store === 'frozen') cold += s.qty;
+  });
+  return all ? { n: all, cold: cold } : null;
+}
+
+/** 装卷弹窗里那行提示。型号一改就跟着变（见 input 监听）。 */
+function loadHintHTML(name){
+  var h = stockHave(String(name || '').trim());
+  if (h) {
+    return I.info + '胶卷仓库里有 ' + h.n + ' 卷' +
+      (h.cold ? '（其中 ' + h.cold + ' 卷冷冻）' : '') +
+      '。装卷只记在这台机身上，不动库存。';
+  }
+  return I.info + '型号自由输入，不受预设限制。装卷只记在这台机身上，不动库存。';
+}
+
+/* 常见张数。135 标准 36 张，也有 24 张的短卷和 12 张的半卷；
+   120 看画幅 —— 6×6 十二张、6×7 十张、6×4.5 十五或十六张、6×9 八张。
+   列表的第一个是这一档的默认值。 */
+var FRAME_PRESETS = { '135':[36, 24, 12], '120':[12, 15, 16, 10, 8] };
+
+/** 规格一换，张数快捷值换一组，并把当前张数挪到新那组的常见值上 ——
+   「36 张」对 120 机身没有意义。返回挪过去的那个数。 */
+function loadSpecChips(sp){
+  var list = FRAME_PRESETS[sp] || FRAME_PRESETS['135'];
+  var ti = document.getElementById('ldTotal');
+  var cur = ti ? parseInt(ti.value, 10) : NaN;
+  if (list.indexOf(cur) < 0) cur = list[0];
+  if (ti) ti.value = cur;
+  var chips = document.querySelectorAll('[data-act="pickLoadTotal"]');
+  [].forEach.call(chips, function(b){
+    var mine = b.getAttribute('data-spec') === sp;
+    b.hidden = !mine;
+    b.setAttribute('aria-pressed', mine && parseInt(b.getAttribute('data-v'), 10) === cur);
+  });
+  return cur;
+}
+
 function viewGear(){
   var list = GEAR.filter(function(g){ return state.gearKind === 'all' || g.kind === state.gearKind; });
   var bodies = GEAR.filter(function(g){ return g.kind === 'body'; }).length;
   var lenses = GEAR.length - bodies;
 
   var cards = list.map(function(g){
+    var L = gearLoad(g);
+    var done = loadDone(L);
     return '<button class="gearcard" data-act="gear" data-id="' + g.id + '">' +
       '<span class="gearshot">' + gearImage(g) +
         (g.photo ? '<span class="cutbadge">' + I.check + '照片</span>' : '') +
@@ -3312,13 +3502,21 @@ function viewGear(){
         '<span class="gearsub" style="display:block">' + esc(g.sub) + '</span>' +
         '<span class="gearmeta">' +
           '<span class="kind">' + (g.kind === 'body' ? '机身' : '镜头') + '</span>' +
+          (L ? '<span class="lb-n' + (done ? ' done' : '') + '">' +
+                 L.shot + '/' + L.total + '</span>' : '') +
         '</span>' +
+        (L ? '<span class="loadband">' +
+               '<span class="lb-film">' + esc(L.film) + '</span>' +
+               '<span class="lb-bar' + (done ? ' done' : '') + '">' +
+                 '<i style="width:' + loadPct(L) + '%"></i></span>' +
+             '</span>' : '') +
       '</span>' +
     '</button>';
   }).join('');
 
   return '<div class="hd"><div><h2>相机仓库</h2>' +
-      '<div class="sub">' + bodies + ' 机身 · ' + lenses + ' 镜头</div></div>' +
+      '<div class="sub">' + bodies + ' 机身 · ' + lenses + ' 镜头' +
+        (loadedBodies() ? ' · ' + loadedBodies() + ' 台在拍' : '') + '</div></div>' +
       '<button class="iconbtn" data-act="addGear" aria-label="新增设备">' + I.plus + '</button>' +
     '</div>' +
     '<div style="padding:0 18px 16px">' +
@@ -4703,13 +4901,150 @@ function sheetStockItem(id){
     '</div>';
 }
 
+/** 机身详情里的「机身内胶卷」面板。装了就显示状态和三个动作，
+ *  没装就是一个装卷入口。 */
+function gearLoadPanel(g){
+  var L = gearLoad(g);
+  if (!L) {
+    return '<div class="loadpanel empty">' +
+      '<div class="lp-empty">这台机身里还没有胶卷</div>' +
+      '<button class="btn" data-act="loadOpen" data-id="' + g.id + '">' +
+        I.roll + '装入一卷</button>' +
+    '</div>';
+  }
+  var done = loadDone(L);
+  var days = loadDays(L);
+  return '<div class="loadpanel' + (done ? ' done' : '') + '">' +
+    '<div class="lp-head">' +
+      '<span class="lp-film">' + esc(L.film) + '</span>' +
+      '<span class="lp-count' + (done ? ' done' : '') + '">' + L.shot +
+        '<u>/' + L.total + '</u></span>' +
+    '</div>' +
+    '<span class="lb-bar' + (done ? ' done' : '') + '">' +
+      '<i style="width:' + loadPct(L) + '%"></i></span>' +
+    '<div class="lp-sub">' +
+      '<span>' + esc(L.spec) + '</span><i class="dotsep"></i>' +
+      '<span>ISO ' + L.iso + '</span><i class="dotsep"></i>' +
+      '<span>装卷 ' + loadSince(L) + (days > 0 ? ' · 已 ' + days + ' 天' : '') + '</span>' +
+    '</div>' +
+    '<div class="lp-acts">' +
+      '<button class="btn primary" data-act="loadShot" data-id="' + g.id + '">' +
+        (done ? '已拍满' : I.plus + '拍了一张') + '</button>' +
+      '<button class="btn" data-act="loadOpen" data-id="' + g.id + '">调整</button>' +
+      '<button class="btn ghost" data-act="loadDrop" data-id="' + g.id + '">卸下</button>' +
+    '</div>' +
+  '</div>';
+}
+
+/** 张数快捷值。两个规格的都渲染出来，靠 hidden 切换 ——
+ *  重画一次会丢用户已经敲进去的字，不如一次画好。 */
+function loadTotalChips(sp, total){
+  var out = '';
+  ['135', '120'].forEach(function(s){
+    FRAME_PRESETS[s].forEach(function(v){
+      out += '<button class="chip" data-act="pickLoadTotal" data-v="' + v + '"' +
+        ' data-spec="' + s + '"' + (s === sp ? '' : ' hidden') +
+        ' aria-pressed="' + (s === sp && v === total) + '">' + v + ' 张</button>';
+    });
+  });
+  return out;
+}
+
+/** 装卷 / 换卷。预设是快捷方式，填完照样能改 —— 跟胶卷仓库那边一个路子。 */
+function sheetLoad(id){
+  var g = null;
+  GEAR.forEach(function(x){ if (x.id === id) g = x; });
+  if (!g) return '';
+  var L = gearLoad(g);
+  var sg = state.sheetArg || {};
+  var spec  = sg.spec || (L && L.spec) || '135';
+  var total = (L && L.total) || FRAME_PRESETS[spec][0];
+  var since = (L && L.since) || todayISO();
+  return '<div class="grab"></div>' +
+    '<h3>' + (L ? '换一卷 / 调整' : '装入胶卷') + '</h3>' +
+    '<p class="sh-sub">记下 ' + esc(g.name) + ' 里装的是什么、能拍多少张。' +
+      '之后在机身详情里点一下就记一格。</p>' +
+
+    '<div class="field">' +
+      '<label for="ldFilm">胶卷型号</label>' +
+      '<input type="text" id="ldFilm" value="' + esc(L ? L.film : '') + '"' +
+        ' placeholder="自由输入，或从下面选一个">' +
+      '<div class="hint" id="ldHint">' + loadHintHTML(L ? L.film : '') + '</div>' +
+    '</div>' +
+
+    '<div class="field">' +
+      '<label>热门胶卷 · 点一下自动填好规格、ISO 和张数</label>' +
+      filmPresetBlock('loadFilm') +
+    '</div>' +
+
+    '<div class="fieldrow">' +
+      '<div class="field"><label>规格</label>' +
+        '<div class="segctl" id="ldSpec" style="width:100%">' +
+          '<button data-act="pickLoadSpec" data-v="135" aria-pressed="' +
+            (spec === '135') + '" style="flex:1">135</button>' +
+          '<button data-act="pickLoadSpec" data-v="120" aria-pressed="' +
+            (spec === '120') + '" style="flex:1">120</button>' +
+        '</div></div>' +
+      '<div class="field"><label for="ldTotal">能拍多少张</label>' +
+        '<input type="text" id="ldTotal" value="' + total + '"></div>' +
+    '</div>' +
+
+    '<div class="field">' +
+      '<label>常见张数 · 点一下填进上面的框</label>' +
+      '<div class="chiprow" id="ldTotals">' + loadTotalChips(spec, total) + '</div>' +
+      '<div class="hint">' + I.info + '135 常见 36 张，也有 24 张的短卷和 12 张的' +
+        '半卷；120 看画幅 —— 6×6 十二张、6×7 十张、6×4.5 十五到十六张。框里可以随便改。' +
+      '</div>' +
+    '</div>' +
+
+    '<div class="field">' +
+      '<label for="ldSince">装卷日期</label>' +
+      '<input type="date" id="ldSince" value="' + since + '">' +
+    '</div>' +
+
+    '<div class="sheet-actions">' +
+      '<button class="btn ghost" data-act="loadCancel" data-id="' + g.id + '">取消</button>' +
+      '<button class="btn primary" data-act="loadSave" data-id="' + g.id + '">' +
+        I.check + (L ? '保存' : '装进去') + '</button>' +
+    '</div>';
+}
+
+/** 卸卷确认。卸下之后这条记录就没了 —— 冲扫完去底片页新建一卷，
+ *  把信息记进胶卷档案，那才是它真正的归宿。 */
+function sheetLoadDrop(id){
+  var g = null;
+  GEAR.forEach(function(x){ if (x.id === id) g = x; });
+  var L = gearLoad(g);
+  if (!L) return '';
+  var days = loadDays(L);
+  return '<div class="grab"></div>' +
+    '<h3>卸下胶卷</h3>' +
+    '<p class="sh-sub">' + esc(g.name) + ' 里的 <b>' + esc(L.film) + '</b>，' +
+      '已拍 ' + L.shot + '/' + L.total + ' 张，装了 ' +
+      (days > 0 ? days + ' 天' : '不到一天') + '。</p>' +
+    '<p class="sh-sub">卸下后这条记录就没了。等这卷冲扫完，在底片页新建一卷，' +
+      '把它记进胶卷档案里。</p>' +
+    '<div class="sheet-actions">' +
+      '<button class="btn ghost" data-act="loadCancel" data-id="' + g.id + '">再拍会儿</button>' +
+      '<button class="btn primary" data-act="loadDropGo" data-id="' + g.id + '"' +
+        ' style="background:var(--rust);border-color:var(--rust);color:#FFF">' +
+        '卸下胶卷</button>' +
+    '</div>';
+}
+
 function sheetGear(id){
   var g = null;
   GEAR.forEach(function(x){ if(x.id === id) g = x; });
   if(!g) return '';
+  // 类型、型号、卡口都可能有「改了还没保存」的值：切换类型会重画这一屏，
+  // 得先从 sheetArg 把用户已经敲进去的字取回来，不然切一下就白打了。
+  var sg = state.sheetArg || {};
+  var kd = sg.kind || g.kind;
+  var nm = (sg.name != null) ? sg.name : g.name;
+  var sb = (sg.sub  != null) ? sg.sub  : g.sub;
   return '<div class="grab"></div>' +
-    '<h3>' + esc(g.name) + '</h3>' +
-    '<p class="sh-sub">' + (g.sub ? esc(g.sub) : '还没有填写卡口 / 规格') + '</p>' +
+    '<h3>' + esc(nm) + '</h3>' +
+    '<p class="sh-sub">' + (sb ? esc(sb) : '还没有填写卡口 / 规格') + '</p>' +
 
     '<div class="cutdemo" style="grid-template-columns:1fr">' +
       '<figure><div class="cimg">' + gearImage(g) + '</div>' +
@@ -4728,21 +5063,23 @@ function sheetGear(id){
         '<span class="oa">' + I.right + '</span></button>' +
     '</div>' +
 
+    (kd === 'body' ? gearLoadPanel(g) : '') +
+
     '<div class="field">' +
       '<label>类型</label>' +
       '<div class="segctl" style="width:100%">' +
-        '<button data-act="pickKind" data-v="body" aria-pressed="' + (g.kind === 'body') + '" style="flex:1">机身</button>' +
-        '<button data-act="pickKind" data-v="lens" aria-pressed="' + (g.kind === 'lens') + '" style="flex:1">镜头</button>' +
+        '<button data-act="pickKind" data-v="body" aria-pressed="' + (kd === 'body') + '" style="flex:1">机身</button>' +
+        '<button data-act="pickKind" data-v="lens" aria-pressed="' + (kd === 'lens') + '" style="flex:1">镜头</button>' +
       '</div>' +
     '</div>' +
     '<div class="field">' +
       '<label for="gmName">型号</label>' +
-      '<input type="text" id="gmName" value="' + esc(g.name) + '" placeholder="自由输入，例如 Nikon FM3A">' +
+      '<input type="text" id="gmName" value="' + esc(nm) + '" placeholder="自由输入，例如 Nikon FM3A">' +
       '<div class="hint">' + I.info + '机身与镜头型号均可自由录入，不受预设限制。</div>' +
     '</div>' +
     '<div class="field">' +
       '<label for="gmSub">卡口 / 规格</label>' +
-      '<input type="text" id="gmSub" value="' + esc(g.sub) + '" placeholder="例如 F 卡口 · 1989">' +
+      '<input type="text" id="gmSub" value="' + esc(sb) + '" placeholder="例如 F 卡口 · 1989">' +
     '</div>' +
 
     '<div class="sheet-actions">' +
@@ -4818,6 +5155,8 @@ function renderSheet(){
     case 'addStock':  h = sheetAddStock(); break;
     case 'stockItem': h = sheetStockItem(state.sheetArg.id); break;
     case 'gearItem':  h = sheetGear(state.sheetArg.id); break;
+    case 'load':      h = sheetLoad(state.sheetArg.id); break;
+    case 'loadDrop':  h = sheetLoadDrop(state.sheetArg.id); break;
     case 'import':    h = sheetImport(state.sheetArg.roll); break;
     case 'importing': h = sheetImporting(); break;
     case 'settings':  h = sheetSettings(); break;
@@ -5218,10 +5557,137 @@ document.getElementById('phone').addEventListener('click', function(e){
     }
 
     case 'pickKind':
+      if (!state.sheetArg) state.sheetArg = {};
       state.sheetArg.kind = d.v;
-      (function(){ var w = t.parentNode; [].forEach.call(w.children, function(b){
-        b.setAttribute('aria-pressed', b === t); }); })();
+      // 切换类型要重画这一屏 —— 机身的「机身内胶卷」面板得跟着出现或消失。
+      // 先把已经敲进去的字收进 sheetArg，重画时填回去，不然切一下就白打了。
+      (function(){
+        var ne = document.getElementById('gmName');
+        var se = document.getElementById('gmSub');
+        if (ne) state.sheetArg.name = ne.value;
+        if (se) state.sheetArg.sub  = se.value;
+      })();
+      renderSheet();
       break;
+
+    // ---------- 机身里那卷胶卷 ----------
+
+    case 'loadOpen':
+      openSheet('load', {id: d.id});
+      break;
+
+    case 'loadShot': {
+      var sg1 = null;
+      GEAR.forEach(function(x){ if (x.id === d.id) sg1 = x; });
+      var sL = gearLoad(sg1);
+      if (!sL) break;
+      // 封顶不越界：多按一下就把「拍了多少张」记多了，比少记麻烦得多。
+      // （135 偶尔多出一格「白送的」37 张，那种情况在「调整」里直接改数。）
+      if (sL.shot >= sL.total) {
+        toast('这卷已经拍满了（' + sL.shot + '/' + sL.total + '）—— 该去冲扫了');
+        break;
+      }
+      sL.shot++;
+      saveDoc();
+      renderSheet();     // 面板上的数字和进度条
+      render(true);      // 列表卡片上的 23/36 也要跟着走
+      toast(loadDone(sL) ? ('拍满 ' + sL.total + ' 张 · 可以冲扫了')
+                         : ('第 ' + sL.shot + ' 张 · 还剩 ' + (sL.total - sL.shot) + ' 张'));
+      break;
+    }
+
+    case 'loadDrop':
+      openSheet('loadDrop', {id: d.id});
+      break;
+
+    case 'loadDropGo': {
+      var dg = null;
+      GEAR.forEach(function(x){ if (x.id === d.id) dg = x; });
+      if (!dg) break;
+      var dL = gearLoad(dg);
+      dg.load = null;
+      saveDoc();
+      render(true);
+      sheetEl.scrollTop = 0;               // 换了一屏，上一屏的滚动位置不接着用
+      openSheet('gearItem', {id: dg.id});
+      toast(dL ? ('已卸下 ' + dL.film + ' · 拍了 ' + dL.shot + ' 张') : '已卸下');
+      break;
+    }
+
+    case 'pickLoadSpec':
+      (function(){ var w = document.getElementById('ldSpec');
+        if (!w) return;
+        [].forEach.call(w.children, function(b){
+          b.setAttribute('aria-pressed', b.getAttribute('data-v') === d.v); }); })();
+      loadSpecChips(d.v);
+      break;
+
+    case 'pickLoadTotal': {
+      var lt = document.getElementById('ldTotal');
+      if (lt) lt.value = d.v;
+      (function(){ var w = document.getElementById('ldTotals');
+        if (!w) return;
+        [].forEach.call(w.children, function(b){
+          b.setAttribute('aria-pressed', b === t); }); })();
+      break;
+    }
+
+    case 'loadFilm': {
+      // 预设只是快捷方式：填型号、规格、ISO，张数按规格给个常见值
+      var li = document.getElementById('ldFilm');
+      if (li) li.value = d.n;
+      var lh = document.getElementById('ldHint');
+      if (lh) lh.innerHTML = loadHintHTML(d.n);
+      (function(){ var w = document.getElementById('ldSpec');
+        if (!w) return;
+        [].forEach.call(w.children, function(b){
+          b.setAttribute('aria-pressed', b.getAttribute('data-v') === d.s); }); })();
+      loadSpecChips(d.s);
+      if (!state.sheetArg) state.sheetArg = {};
+      state.sheetArg.spec = d.s;
+      state.sheetArg.iso  = parseInt(d.iso, 10) || 400;
+      break;
+    }
+
+    case 'loadCancel':
+      sheetEl.scrollTop = 0;               // 换了一屏，上一屏的滚动位置不接着用
+      openSheet('gearItem', {id: d.id});
+      break;
+
+    case 'loadSave': {
+      var sg2 = null;
+      GEAR.forEach(function(x){ if (x.id === d.id) sg2 = x; });
+      if (!sg2) break;
+      var fEl = document.getElementById('ldFilm');
+      var film = fEl ? String(fEl.value || '').trim() : '';
+      if (!film) { toast('请填写或选一个胶卷型号'); break; }
+      var tEl = document.getElementById('ldTotal');
+      var total = parseInt(tEl ? tEl.value : '', 10);
+      if (!total || total < 1) { toast('张数至少填 1'); break; }
+      if (total > 999) total = 999;
+      var oldL = gearLoad(sg2);
+      // 已经拍掉的张数留着；改了张数时收到上限以内，不然会出现 40/36
+      var shot = oldL ? Math.min(oldL.shot, total) : 0;
+      var sEl = document.getElementById('ldSince');
+      sg2.kind = 'body';                 // 装卷的必然是机身
+      sg2.load = {
+        film:  film,
+        spec:  segValue('ldSpec') || '135',
+        // 预设带过来的 ISO 最准（T-MAX P3200 这种名字里没有独立的 3200）；
+        // 手输的型号从名字里猜，猜不到按 400
+        iso:   (state.sheetArg && state.sheetArg.iso) || guessIso(film) || 400,
+        total: total,
+        shot:  shot,
+        since: (sEl && sEl.value) ? sEl.value : todayISO()
+      };
+      saveDoc();
+      render(true);
+      sheetEl.scrollTop = 0;               // 换了一屏，上一屏的滚动位置不接着用
+      openSheet('gearItem', {id: sg2.id}); // 回到机身详情，面板上就是刚存下的状态
+      toast(oldL ? ('已更新 · ' + film + ' ' + shot + '/' + total)
+                 : ('已装卷 · ' + film + ' · 能拍 ' + total + ' 张'));
+      break;
+    }
 
     case 'gearSave': {
       var gg = null;
@@ -5232,6 +5698,8 @@ document.getElementById('phone').addEventListener('click', function(e){
       if (nEl && nEl.value.trim()) gg.name = nEl.value.trim();
       if (sEl) gg.sub = sEl.value.trim();
       if (state.sheetArg && state.sheetArg.kind) gg.kind = state.sheetArg.kind;
+      // 改成镜头了，胶卷仓就不存在了 —— 留着会在列表里显示成一台装着胶卷的镜头
+      if (gg.kind !== 'body') gg.load = null;
       saveDoc();
       closeSheet();
       render(true);
@@ -5489,6 +5957,28 @@ document.getElementById('phone').addEventListener('click', function(e){
 
     case 'closeSheet':
       closeSheet(); break;
+  }
+});
+
+/* 装卷弹窗里有两处要跟着输入实时变：型号一改，仓库里有多少卷的提示跟着改；
+   张数一改，下面的快捷值跟着亮或灭。这两处都不能靠重画解决 —— 重画会把用户
+   正在敲的字冲掉。 */
+document.getElementById('phone').addEventListener('input', function(e){
+  var el = e.target;
+  if (!el || !el.id) return;
+  if (el.id === 'ldFilm') {
+    if (state.sheetArg) state.sheetArg.iso = 0;   // 换了型号，预设给的 ISO 不再作数
+    var h = document.getElementById('ldHint');
+    if (h) h.innerHTML = loadHintHTML(el.value);
+    return;
+  }
+  if (el.id === 'ldTotal') {
+    var cur = parseInt(el.value, 10);
+    var w = document.getElementById('ldTotals');
+    if (!w) return;
+    [].forEach.call(w.children, function(b){
+      b.setAttribute('aria-pressed', parseInt(b.getAttribute('data-v'), 10) === cur);
+    });
   }
 });
 
