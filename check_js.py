@@ -9,6 +9,8 @@
      最早的脚本因此放过了它 —— 结果是点热门胶卷预设没反应）
 3. 每个 I.xxx 图标引用是否都有定义
    （写错会渲染成字符串 "undefined"，界面上是个突兀的灰字，不报错）
+4. 每个 Native.xxx 调用是否都在垫片里有实现
+   （漏了就是「弹窗切过去了，然后什么都没发生」）
 
 用法:  python check_js.py [file.html]
 """
@@ -123,6 +125,27 @@ def check_icons(src):
     return sorted(used - defined), len(defined)
 
 
+def check_native(src):
+    """每个 Native.xxx 调用都要在垫片里有实现。
+
+    漏了的后果和图标写错一模一样：静态看没问题，点下去才 TypeError，
+    而且界面往往已经先切过弹窗了 —— 表现是「弹窗切过去之后就没反应了」。
+    加压缩包导入时就漏了 Native.pickZip，在模拟器上才看出来。
+
+    垫片是 var Native = (function(){ ... })(); 里返回的那个对象字面量，
+    成员都是 4 空格缩进的 name: function。"""
+    head = "var Native = (function(){"
+    if head not in src:
+        return ['找不到 Native 垫片'], 0
+    start = src.index(head)
+    end = src.index("\n})();", start)
+    body = src[start:end]
+
+    defined = set(re.findall(r"^\s{4}([A-Za-z_$][\w$]*)\s*:\s*function", body, re.M))
+    used = set(re.findall(r"\bNative\.([A-Za-z_$][\w$]*)", src))
+    return sorted(used - defined), len(defined)
+
+
 def main():
     path = sys.argv[1] if len(sys.argv) > 1 else 'prototype/film-archive-app.html'
     src = io.open(path, encoding='utf-8').read()
@@ -145,6 +168,13 @@ def main():
         bad += 1
     else:
         print('  OK    data-act    %5d 个，全部有处理' % total)
+
+    bad_native, native_total = check_native(src)
+    if bad_native:
+        print('  FAIL  Native 调了但垫片里没实现: %s' % ', '.join(bad_native))
+        bad += 1
+    else:
+        print('  OK    native     %5d 个，全部有实现' % native_total)
 
     bad_icons, icon_total = check_icons(src)
     if bad_icons:

@@ -2361,6 +2361,27 @@ var Native = (function(){
       browserImport(req);
     },
 
+    /** 选一个 zip 压缩包。原生侧选完先扫一遍，结果走 onZipScanned。 */
+    pickZip: function(){
+      if (isNative && raw.pickZip) { raw.pickZip(); return; }
+      // 浏览器里没实现解压 —— 那是几百行 JS，而这条路只有手机上用得到。
+      // 但不能装作没事：把话说清楚，让界面按「出错了」正常收尾。
+      setTimeout(function(){
+        window.__bridge.onZipScanned(JSON.stringify({
+          error: '浏览器里没做压缩包导入，请在手机上用'
+        }));
+      }, 0);
+    },
+
+    importZip: function(req){
+      if (isNative && raw.importZip) { raw.importZip(JSON.stringify(req)); return; }
+      setTimeout(function(){
+        window.__bridge.onZipScanned(JSON.stringify({
+          error: '浏览器里没做压缩包导入，请在手机上用'
+        }));
+      }, 0);
+    },
+
     cancelImport: function(){
       if (isNative && raw.cancelImport) raw.cancelImport();
     },
@@ -3080,6 +3101,7 @@ var state = {
   wmPort:null,          // 边框方向：null 自动 / true 强制竖构图
   importKeep:false,
   importProgress:null,
+  zipScan:null,          // 扫描压缩包的结果：{count, bytes, skipped}
   gearTarget:'',
   reorderPick:null,
   pendingGear:'',
@@ -4071,15 +4093,10 @@ function reconcileSegs(r){
   r.segs = out;
 }
 
-function sheetImport(rollId){
-  var r = rollById(rollId);
-  if (!r) return '';
-  var keep = !!state.importKeep;
-  var free = fmtBytes(APP.freeBytes);
-  var have = (r.photos || []).length;
-
+/** 存储方式的两个选项。相册导入和压缩包导入共用 —— 措辞也就不会走偏。 */
+function keepOpts(copyDesc, origDesc){
   function opt(v, icon, title, desc) {
-    var on = (keep === (v === '1'));
+    var on = (!!state.importKeep === (v === '1'));
     return '<button class="opt' + (on ? ' on' : '') + '" data-act="importKeep" data-v="' + v + '">' +
       '<span class="oi">' + icon + '</span>' +
       '<span style="min-width:0">' +
@@ -4089,6 +4106,15 @@ function sheetImport(rollId){
       '<span class="oa">' + (on ? I.check : '') + '</span>' +
     '</button>';
   }
+  return opt('0', I.dl, '仅压缩副本', copyDesc) +
+         opt('1', I.up, '保留原片', origDesc);
+}
+
+function sheetImport(rollId){
+  var r = rollById(rollId);
+  if (!r) return '';
+  var free = fmtBytes(APP.freeBytes);
+  var have = (r.photos || []).length;
 
   return '<div class="grab"></div>' +
     '<h3>导入照片</h3>' +
@@ -4100,10 +4126,8 @@ function sheetImport(rollId){
     '<div class="field">' +
       '<label>存储方式</label>' +
       '<div class="opts">' +
-        opt('0', I.dl, '仅压缩副本',
-            '长边 ' + SETTINGS.displayPx + 'px，一卷 36 张约 15 MB。原图留在相册里') +
-        opt('1', I.up, '保留原片',
-            '源文件原样再存一份，一卷 36 张可能 2–3 GB') +
+        keepOpts('长边 ' + SETTINGS.displayPx + 'px，一卷 36 张约 15 MB。原图留在相册里',
+                 '源文件原样再存一份，一卷 36 张可能 2–3 GB') +
       '</div>' +
     '</div>' +
 
@@ -4118,12 +4142,67 @@ function sheetImport(rollId){
         I.up + '从相册选照片</button>' +
     '</div>' +
     '<div class="sheet-actions single" style="margin-top:8px">' +
+      '<button class="btn" data-act="importZipPick" data-roll="' + rollId + '">' +
+        I.folder + '从压缩包导入</button>' +
+    '</div>' +
+    '<p class="sh-sub" style="margin-top:14px;margin-bottom:0">' + I.info +
+      ' 压缩包按文件名里的数字顺序排（IMG_2 排在 IMG_10 前面）。' +
+      '只认 zip —— rar 和 7z 暂时不行。</p>' +
+    '<div class="sheet-actions single" style="margin-top:8px">' +
+      '<button class="btn ghost" data-act="closeSheet">取消</button>' +
+    '</div>';
+}
+
+/** 扫描完了，先让用户看一眼有多大再决定 —— 冲扫包动辄上 GB，
+ *  选完就闷头解压是这功能最容易伤到人的地方。 */
+function sheetZipConfirm(rollId){
+  var z = state.zipScan || {count: 0, bytes: 0, skipped: 0};
+  // 长边 2048 的 q85 JPEG 大约每张 0.3–0.5MB，取中偏上
+  var copies = fmtBytes(Math.max(1, z.count) * 400 * 1024);
+  return '<div class="grab"></div>' +
+    '<h3>压缩包里有 ' + z.count + ' 张</h3>' +
+    '<p class="sh-sub">解压后一共 ' + fmtBytes(z.bytes) + '。' +
+      (z.skipped ? '另有 ' + z.skipped + ' 个非图片文件会跳过。' : '') +
+      '按文件名顺序拼进底片条。</p>' +
+
+    '<div class="field">' +
+      '<label>存储方式</label>' +
+      '<div class="opts">' +
+        keepOpts('长边 ' + SETTINGS.displayPx + 'px，' + z.count + ' 张约 ' + copies + '。',
+                 '把解压出来的原始文件再存一份，约 ' + fmtBytes(z.bytes) + '。') +
+      '</div>' +
+    '</div>' +
+
+    '<div class="exportmeta">' +
+      (APP.freeBytes ? '<span>剩余空间 ' + fmtBytes(APP.freeBytes) + '</span>' : '') +
+      '<span>缩略图 ' + SETTINGS.thumbPx + 'px</span>' +
+    '</div>' +
+
+    '<div class="sheet-actions single" style="margin-top:16px">' +
+      '<button class="btn primary" data-act="zipStart" data-roll="' + rollId + '">' +
+        I.check + '开始导入</button>' +
+    '</div>' +
+    '<div class="sheet-actions single" style="margin-top:8px">' +
       '<button class="btn ghost" data-act="closeSheet">取消</button>' +
     '</div>';
 }
 
 function sheetImporting(){
   var p = state.importProgress || { done: 0, total: 0 };
+
+  // 读压缩包这一段张数还不知道，画不了进度条 —— 但数字在动，
+  // 总比一个「正在导入 0/0」看着像卡死强
+  if (p.phase === 'scan') {
+    return '<div class="grab"></div>' +
+      '<h3>正在读取压缩包</h3>' +
+      '<p class="sh-sub">已认出 ' + (p.files || 0) + ' 张' +
+        (p.bytes ? ' · 解压后约 ' + fmtBytes(p.bytes) : '') +
+        ' —— 整包要先数一遍，才知道它到底有多大。</p>' +
+      '<div class="sheet-actions single" style="margin-top:22px">' +
+        '<button class="btn ghost" data-act="importCancel">停止</button>' +
+      '</div>';
+  }
+
   var pct = p.total ? Math.round(p.done / p.total * 100) : 0;
   return '<div class="grab"></div>' +
     '<h3>正在导入</h3>' +
@@ -4138,9 +4217,36 @@ function sheetImporting(){
 window.__bridge.onImportProgress = function(json){
   var o;
   try { o = JSON.parse(json); } catch(e){ return; }
-  state.importProgress = { done: o.done || 0, total: o.total || 0 };
+  state.importProgress = (o.phase === 'scan')
+    ? { phase:'scan', files:o.files || 0, bytes:o.bytes || 0 }
+    : { phase:'decode', done:o.done || 0, total:o.total || 0 };
   if (o.error) Native.log('warn', '导入失败 ' + (o.failedName || '') + '：' + o.error);
   if (state.sheet === 'importing') renderSheet();
+};
+
+/* 压缩包扫描完了。要么弹确认，要么把不能导的原因说清楚。 */
+window.__bridge.onZipScanned = function(json){
+  var o;
+  try { o = JSON.parse(json); } catch(e){ Native.log('error', 'onZipScanned 解析失败'); return; }
+  var roll = (state.sheetArg && state.sheetArg.roll) || null;
+
+  if (o.cancelled) {
+    // 用户自己按的停止，不用再弹一句
+    state.importProgress = null;
+    closeSheet();
+    render(true);
+    return;
+  }
+  state.importProgress = null;
+  if (o.error) {
+    closeSheet();
+    render(true);
+    toast(o.error);
+    Native.log('warn', '压缩包导入：' + o.error);
+    return;
+  }
+  state.zipScan = o;
+  openSheet('zipConfirm', {roll: roll});
 };
 
 window.__bridge.onImportDone = function(json){
@@ -4163,10 +4269,20 @@ window.__bridge.onImportDone = function(json){
   closeSheet();
   render(true);
 
-  var msg = added ? ('已导入 ' + added + ' 张' + (o.totalBytes ? ' · ' + fmtBytes(o.totalBytes) : ''))
-                  : '没有导入任何照片';
-  if (o.cancelled && added) msg += '（已中断）';
-  if (o.failures && o.failures.length) msg += ' · ' + o.failures.length + ' 张失败';
+  var msg;
+  if (added) {
+    msg = '已导入 ' + added + ' 张' + (o.totalBytes ? ' · ' + fmtBytes(o.totalBytes) : '');
+    if (o.cancelled) msg += '（已中断）';
+    if (o.failures && o.failures.length) msg += ' · ' + o.failures.length + ' 张失败';
+  } else if (o.cancelled) {
+    msg = '已取消';                       // 在选择器里返回，或者按了停止
+  } else if (o.failures && o.failures.length) {
+    // 一张都没进来时把第一条原因说出来。否则用户只看到
+    // 「没有导入任何照片」，完全不知道发生了什么
+    msg = o.failures[0];
+  } else {
+    msg = '没有导入任何照片';
+  }
   toast(msg);
   if (o.failures && o.failures.length) {
     for (var i = 0; i < o.failures.length; i++) Native.log('warn', '导入失败：' + o.failures[i]);
@@ -5159,6 +5275,7 @@ function renderSheet(){
     case 'loadDrop':  h = sheetLoadDrop(state.sheetArg.id); break;
     case 'import':    h = sheetImport(state.sheetArg.roll); break;
     case 'importing': h = sheetImporting(); break;
+    case 'zipConfirm': h = sheetZipConfirm(state.sheetArg.roll); break;
     case 'settings':  h = sheetSettings(); break;
     case 'illus':     h = sheetIllus(state.sheetArg.id); break;
     case 'reorder':   h = sheetReorder(state.sheetArg.roll); break;
@@ -5468,6 +5585,30 @@ document.getElementById('phone').addEventListener('click', function(e){
       state.sheetArg = { roll: d.roll };
       renderSheet();
       Native.importPhotos({
+        rollId: d.roll,
+        keepOriginal: !!state.importKeep,
+        displayPx: SETTINGS.displayPx,
+        thumbPx: SETTINGS.thumbPx,
+        quality: SETTINGS.quality
+      });
+      break;
+
+    case 'importZipPick':
+      // 立刻切到进度弹窗：选完压缩包原生要整包扫一遍，不先切的话
+      // 那几十秒里界面一声不吭，看着就是卡住了
+      state.importProgress = { phase:'scan', files:0, bytes:0 };
+      state.sheet = 'importing';
+      state.sheetArg = { roll: d.roll };
+      renderSheet();
+      Native.pickZip();
+      break;
+
+    case 'zipStart':
+      state.importProgress = { phase:'decode', done:0, total:(state.zipScan || {}).count || 0 };
+      state.sheet = 'importing';
+      state.sheetArg = { roll: d.roll };
+      renderSheet();
+      Native.importZip({
         rollId: d.roll,
         keepOriginal: !!state.importKeep,
         displayPx: SETTINGS.displayPx,

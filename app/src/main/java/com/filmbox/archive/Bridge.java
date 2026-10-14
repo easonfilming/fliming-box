@@ -169,6 +169,45 @@ public class Bridge implements Importer.Callback, Capture.Callback {
         }
     }
 
+    /**
+     * 选一个 zip 压缩包。选完原生侧先扫描一遍（数张数、量解压后体积），
+     * 结果走 onZipScanned —— 界面确认了才会真解压，所以这里不传 rollId。
+     */
+    @JavascriptInterface
+    public void pickZip() {
+        if (importer == null) {
+            fail("onImportError", "导入器未就绪");
+            return;
+        }
+        importer.beginZip();
+    }
+
+    /** 确认弹窗里点了「开始导入」，这时候才真解压解码。 */
+    @JavascriptInterface
+    public void importZip(String reqJson) {
+        if (importer == null) {
+            fail("onImportError", "导入器未就绪");
+            return;
+        }
+        try {
+            JSONObject o = new JSONObject(reqJson);
+            String rollId = o.optString("rollId", "");
+            if (rollId.isEmpty()) {
+                fail("onImportError", "缺少 rollId");
+                return;
+            }
+            pendingRollId = rollId;
+            importer.startZip(
+                    rollId,
+                    o.optBoolean("keepOriginal", false),
+                    o.optInt("displayPx", 2048),
+                    o.optInt("thumbPx", 360),
+                    o.optInt("quality", 85));
+        } catch (JSONException e) {
+            fail("onImportError", "请求格式错误: " + e.getMessage());
+        }
+    }
+
     @JavascriptInterface
     public void cancelImport() {
         if (importer != null) importer.cancel();
@@ -442,6 +481,7 @@ public class Bridge implements Importer.Callback, Capture.Callback {
         JSONObject o = new JSONObject();
         try {
             o.put("rollId", pendingRollId);
+            o.put("phase", "decode");
             o.put("done", done);
             o.put("total", total);
             if (r != null) o.put("photo", photoJson(r));
@@ -451,6 +491,30 @@ public class Bridge implements Importer.Callback, Capture.Callback {
             }
         } catch (JSONException ignored) {}
         call("onImportProgress", o.toString());
+    }
+
+    @Override
+    public void onScan(int files, long bytes) {
+        JSONObject o = new JSONObject();
+        try {
+            o.put("phase", "scan");
+            o.put("files", files);
+            o.put("bytes", bytes);
+        } catch (JSONException ignored) {}
+        call("onImportProgress", o.toString());
+    }
+
+    @Override
+    public void onZipScanned(ZipImporter.Scan s) {
+        JSONObject o = new JSONObject();
+        try {
+            o.put("count", s.names.size());
+            o.put("bytes", s.bytes);
+            o.put("skipped", s.skipped);
+            o.put("cancelled", s.cancelled);
+            if (s.error != null) o.put("error", s.error);
+        } catch (JSONException ignored) {}
+        call("onZipScanned", o.toString());
     }
 
     @Override

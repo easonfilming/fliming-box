@@ -10,6 +10,7 @@ import android.net.Uri;
 import android.util.Log;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -48,6 +49,10 @@ public class PhotoStore {
         originals.mkdirs();
         gear.mkdirs();
         tmp.mkdirs();
+        // 压缩包导入中途被杀掉会留下 zip_*.part，启动时清一次。
+        // 构造函数在 onStart 里跑，那时不可能有导入在进行，安全。
+        File[] stale = tmp.listFiles((d, nm) -> nm.startsWith("zip_") && nm.endsWith(".part"));
+        if (stale != null) for (File f : stale) f.delete();
     }
 
     public File photoFile(String rollId, String pid) {
@@ -80,6 +85,72 @@ public class PhotoStore {
     }
 
     /**
+     * 取字节的来源。相册给的 content:// URI 和压缩包解出来的临时文件
+     * 在这一点上不同，其余全部相同。
+     */
+    public interface Source {
+        /** 每次调用都返回一个全新的、从头开始的流。 */
+        InputStream open() throws IOException;
+        /** 原始文件名。取后缀、写进 doc.json 都用它。 */
+        String name();
+        /** 把源内容落到 dest。源本来就是 dest（或能直接改名过去）时不白拷。 */
+        void materialize(File dest) throws IOException;
+    }
+
+    /** 相册 / 文件选择器给的 URI。content 流不可回退，所以每次读都要重开。 */
+    private static final class UriSource implements Source {
+        private final ContentResolver cr;
+        private final Uri uri;
+        private final String name;
+        UriSource(ContentResolver cr, Uri uri) {
+            this.cr = cr;
+            this.uri = uri;
+            this.name = displayName(cr, uri);
+        }
+        @Override public InputStream open() throws IOException {
+            InputStream in = cr.openInputStream(uri);
+            if (in == null) throw new IOException("打不开输入流");
+            return in;
+        }
+        @Override public String name() { return name; }
+        @Override public void materialize(File dest) throws IOException { copyTo(this, dest); }
+    }
+
+    /**
+     * 压缩包里的一个 entry —— 已经先落到 tmp/ 了。
+     *
+     * zip 的 entry 只能顺着读一次，而这条流水线要读它三遍（量尺寸、读 EXIF、
+     * 解码）。所以先落成临时文件，之后按最普通的文件处理：内存恒定（64KB
+     * 缓冲），也不用怀疑「压缩包那条路是不是解码得不一样」。
+     */
+    private static final class FileSource implements Source {
+        private final File file;
+        private final String name;
+        FileSource(File file, String name) { this.file = file; this.name = name; }
+        @Override public InputStream open() throws IOException {
+            return new FileInputStream(file);
+        }
+        @Override public String name() { return name; }
+        @Override public void materialize(File dest) throws IOException {
+            // 源就是目标（keepOriginal 时 entry 直接落在 originals/）→ 什么都不用做
+            if (file.getCanonicalPath().equals(dest.getCanonicalPath())) return;
+            ensureParent(dest);
+            // 同一个文件系统，改名是瞬时的，别白拷 80MB
+            if (file.renameTo(dest)) return;
+            copyTo(this, dest);
+        }
+    }
+
+    private static void copyTo(Source src, File dest) throws IOException {
+        ensureParent(dest);
+        try (InputStream in = src.open(); OutputStream out = new FileOutputStream(dest)) {
+            byte[] buf = new byte[64 * 1024];
+            int k;
+            while ((k = in.read(buf)) > 0) out.write(buf, 0, k);
+        }
+    }
+
+    /**
      * 导入一张。调用方保证在后台线程。
      *
      * @param keepOriginal 是否把源字节流拷贝到 originals/。
@@ -89,16 +160,35 @@ public class PhotoStore {
     public Result importOne(ContentResolver cr, Uri uri, String pid, String rollId,
                             boolean keepOriginal, int displayPx, int thumbPx, int quality)
             throws IOException {
+        return importFrom(new UriSource(cr, uri), pid, rollId,
+                keepOriginal, displayPx, thumbPx, quality);
+    }
+
+    /**
+     * 导入压缩包里解出来的一张。
+     *
+     * @param file 已经落好的临时文件
+     * @param name entry 的文件名（不含路径，只要后缀对就行）
+     */
+    public Result importOneFile(File file, String name, String pid, String rollId,
+                                boolean keepOriginal, int displayPx, int thumbPx, int quality)
+            throws IOException {
+        return importFrom(new FileSource(file, name), pid, rollId,
+                keepOriginal, displayPx, thumbPx, quality);
+    }
+
+    private Result importFrom(Source src, String pid, String rollId,
+                              boolean keepOriginal, int displayPx, int thumbPx, int quality)
+            throws IOException {
 
         Result r = new Result();
         r.id = pid;
-        r.name = displayName(cr, uri);
+        r.name = src.name();
 
         // ---- 1. 量尺寸，算采样率 ----
         BitmapFactory.Options bounds = new BitmapFactory.Options();
         bounds.inJustDecodeBounds = true;
-        try (InputStream in = cr.openInputStream(uri)) {
-            if (in == null) throw new IOException("打不开输入流");
+        try (InputStream in = src.open()) {
             BitmapFactory.decodeStream(in, null, bounds);
         }
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
@@ -117,21 +207,18 @@ public class PhotoStore {
         Bitmap scaled = null;
         Bitmap thumb = null;
         try {
-            try (InputStream in = cr.openInputStream(uri)) {
-                if (in == null) throw new IOException("打不开输入流");
+            try (InputStream in = src.open()) {
                 bmp = BitmapFactory.decodeStream(in, null, opts);
             }
             if (bmp == null) throw new IOException("解码失败");
 
-            // ---- 2. EXIF 旋正。必须重新开一个流 —— content 流不可回退 ----
+            // ---- 2. EXIF 旋正。必须重新开一个流 —— 流读过就回不去了 ----
             int orientation = ExifInterface.ORIENTATION_NORMAL;
-            try (InputStream in = cr.openInputStream(uri)) {
-                if (in != null) {
-                    ExifInterface exif = new ExifInterface(in);
-                    orientation = exif.getAttributeInt(
-                            ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL);
-                    r.takenAt = exif.getAttribute(ExifInterface.TAG_DATETIME_ORIGINAL);
-                }
+            try (InputStream in = src.open()) {
+                ExifInterface exif = new ExifInterface(in);
+                orientation = exif.getAttributeInt(
+                        ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL);
+                r.takenAt = exif.getAttribute(ExifInterface.TAG_DATETIME_ORIGINAL);
             } catch (IOException e) {
                 // EXIF 读不到不影响导入，只是方向可能不对
                 Log.w(TAG, "EXIF 读取失败，按未旋转处理", e);
@@ -177,18 +264,12 @@ public class PhotoStore {
             r.thumbW = thumb.getWidth();
             r.thumbH = thumb.getHeight();
 
-            // ---- 6. 原片：纯流拷贝，不解码不重编码 ----
+            // ---- 6. 原片：纯字节搬运，不解码不重编码。压缩包那条路上
+            //          源就是临时文件，materialize 会直接改名过去
             if (keepOriginal) {
                 String ext = extensionOf(r.name);
                 File of = originalFile(rollId, pid, ext);
-                ensureParent(of);
-                try (InputStream in = cr.openInputStream(uri);
-                     OutputStream out = new FileOutputStream(of)) {
-                    if (in == null) throw new IOException("打不开原片输入流");
-                    byte[] buf = new byte[64 * 1024];
-                    int n;
-                    while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
-                }
+                src.materialize(of);
                 r.original = true;
                 r.origBytes = of.length();
                 r.origExt = ext;

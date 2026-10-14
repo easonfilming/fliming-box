@@ -11,6 +11,8 @@ import android.net.Uri;
 import android.provider.OpenableColumns;
 import android.util.Log;
 
+import java.io.File;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -34,6 +36,8 @@ public class Importer {
 
     private static final String TAG = "FilmboxImport";
     public static final int REQ_PICK = 1001;
+    /** 压缩包走的是文件选择器，跟相册那条路不是一个 Intent。 */
+    public static final int REQ_PICK_ZIP = 1004;
 
     /** 3 个并发：36 张同时解码必 OOM，再多线程收益也很小。 */
     private static final int THREADS = 3;
@@ -42,6 +46,10 @@ public class Importer {
         /** done 从 1 开始。失败时 r 为 null，用 failedName + error 描述。 */
         void onOne(int done, int total, PhotoStore.Result r, String failedName, String error);
         void onFinished(List<PhotoStore.Result> ok, List<String> failed, boolean cancelled);
+        /** 扫描压缩包时的进度。files 是已认出的图片数，total 未知。 */
+        void onScan(int files, long bytes);
+        /** 扫描完了，把结果交给界面确认。error 非 null 就是不能导。 */
+        void onZipScanned(ZipImporter.Scan s);
     }
 
     private final Activity act;
@@ -58,6 +66,11 @@ public class Importer {
     private volatile ExecutorService pool;
     private final AtomicBoolean cancelled = new AtomicBoolean(false);
 
+    // 压缩包：选区之后要停在「等用户确认」这一步，所以 URI 和排好序的
+    // entry 名单得留着，等 startZip() 用
+    private Uri pendingZipUri;
+    private List<String> pendingZipNames;
+
     public Importer(Activity act, PhotoStore store, Callback cb) {
         this.act = act;
         this.store = store;
@@ -69,6 +82,10 @@ public class Importer {
     // ============================================================
 
     public void begin(String rollId, boolean keepOriginal, int displayPx, int thumbPx, int quality) {
+        // 复位取消标志。以前不复位：只要「停止导入」按过一次，之后每次导入
+        // 都在第一个任务开头就撞上 cancelled=true 直接返回 —— 表现是
+        // 「点了导入，转了半秒，说没有导入任何照片」，而且完全没有报错。
+        cancelled.set(false);
         this.rollId = rollId;
         this.keepOriginal = keepOriginal;
         this.displayPx = displayPx > 0 ? displayPx : 2048;
@@ -125,6 +142,73 @@ public class Importer {
         return i;
     }
 
+    /**
+     * 选一个 zip 压缩包。选完先扫描一遍（数张数、量解压后体积），
+     * 结果回给界面确认了再真导 —— 冲扫包动辄上 GB，不能选完就闷头干。
+     */
+    public void beginZip() {
+        Intent i = zipPicker();
+        try {
+            act.startActivityForResult(i, REQ_PICK_ZIP);
+        } catch (ActivityNotFoundException e) {
+            Log.w(TAG, "文件选择器不可用，回退 ACTION_GET_CONTENT", e);
+            Intent f = new Intent(Intent.ACTION_GET_CONTENT);
+            f.addCategory(Intent.CATEGORY_OPENABLE);
+            f.setType("*/*");
+            try {
+                act.startActivityForResult(f, REQ_PICK_ZIP);
+            } catch (ActivityNotFoundException e2) {
+                cb.onZipScanned(zipPickFail("设备上没有可用的文件选择器"));
+            }
+        }
+    }
+
+    private static ZipImporter.Scan zipPickFail(String msg) {
+        ZipImporter.Scan s = new ZipImporter.Scan();
+        s.error = msg;
+        return s;
+    }
+
+    /**
+     * 文件选择器。这里**不能**用 photoPicker —— 那是照片网格，看不见 zip。
+     *
+     * type 必须是 *&#47;*：网盘下来的 zip 十有八九被标成
+     * application/octet-stream，写死 application/zip 的话它在选择器里直接
+     * 变灰不可选，用户只会觉得「点了没反应」。
+     */
+    private Intent zipPicker() {
+        Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        i.addCategory(Intent.CATEGORY_OPENABLE);
+        i.setType("*/*");
+        // 把 rar / 7z 也列进来，让它们**能选中** —— 选不中用户只会觉得
+        // 「我那个包怎么不见了」，选中了才能告诉他「这是 rar，暂时只能导 zip」
+        i.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{
+                "application/zip", "application/x-zip-compressed",
+                "application/x-zip", "multipart/x-zip",
+                "application/vnd.rar", "application/x-rar-compressed",
+                "application/x-7z-compressed",
+                "application/octet-stream"});
+        i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        return i;
+    }
+
+    /** 用户在确认弹窗里点了「开始导入」。 */
+    public void startZip(String rollId, boolean keepOriginal,
+                         int displayPx, int thumbPx, int quality) {
+        if (pendingZipUri == null || pendingZipNames == null || pendingZipNames.isEmpty()) {
+            cb.onFinished(Collections.emptyList(),
+                    Collections.singletonList("压缩包已经不在了，重新选一次"), false);
+            return;
+        }
+        this.rollId = rollId;
+        this.keepOriginal = keepOriginal;
+        this.displayPx = displayPx > 0 ? displayPx : 2048;
+        this.thumbPx = thumbPx > 0 ? thumbPx : 360;
+        this.quality = quality > 0 ? quality : 85;
+        cancelled.set(false);
+        runZip(pendingZipNames);
+    }
+
     public void cancel() {
         cancelled.set(true);
     }
@@ -134,6 +218,10 @@ public class Importer {
     // ============================================================
 
     public void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (requestCode == REQ_PICK_ZIP) {
+            onZipPicked(resultCode, data);
+            return;
+        }
         if (requestCode != REQ_PICK) return;
 
         if (resultCode != Activity.RESULT_OK || data == null) {
@@ -161,6 +249,89 @@ public class Importer {
         }
 
         run(uris);
+    }
+
+    /** 选完压缩包：扫描不能占着主线程 —— onActivityResult 就在主线程上。 */
+    private void onZipPicked(int resultCode, Intent data) {
+        if (resultCode != Activity.RESULT_OK || data == null || data.getData() == null) {
+            cb.onFinished(Collections.emptyList(), Collections.emptyList(), true);
+            return;
+        }
+        final Uri uri = data.getData();
+        pendingZipUri = uri;
+        pendingZipNames = null;
+
+        new Thread(() -> {
+            final long[] last = {0L};
+            ZipImporter.Scan s = ZipImporter.scan(act.getContentResolver(), uri,
+                    (files, bytes) -> {
+                        if (cancelled.get()) return false;
+                        // 两千个 entry 就是两千次回调，每次都过桥会把页面淹了
+                        long now = System.currentTimeMillis();
+                        if (now - last[0] < 120) return true;
+                        last[0] = now;
+                        cb.onScan(files, bytes);
+                        return true;
+                    });
+            // 中途被取消的话 names 只填了一半，不能留下来给 startZip 用
+            if (s.error == null && !s.cancelled) pendingZipNames = s.names;
+            cb.onZipScanned(s);
+        }, "zip-scan").start();
+    }
+
+    /**
+     * 解压 + 逐张导入。
+     *
+     * 这一条路是**串行**的：ZipInputStream 只能顺着读，解出第 N+1 个 entry
+     * 之前必须先读完第 N 个。要并行得加一条「读的人 + 解码池 + 有界队列」的
+     * 流水线，临时文件占磁盘不占内存，所以代价不高，但取消和异常传播都会
+     * 复杂一圈。第一版先串行 —— 进度条在走，几十秒是能接受的。
+     */
+    private void runZip(final List<String> names) {
+        final ContentResolver cr = act.getContentResolver();
+        final Uri uri = pendingZipUri;
+        final int total = names.size();
+        final AtomicInteger done = new AtomicInteger(0);
+        final List<String> failed = new ArrayList<>();
+        // 按 names 里的下标预分配槽位。extract() 是顺着压缩包走的 ——
+        // 归档顺序和排好的顺序通常不一样，直接 append 会让底片条按
+        // 「压缩包里的存放顺序」排，前面的自然排序就白做了。
+        final PhotoStore.Result[] slots = new PhotoStore.Result[total];
+        final String base = "p_" + rollId + "_" + Long.toString(System.currentTimeMillis(), 36);
+
+        new Thread(() -> {
+            try {
+                ZipImporter.extract(cr, uri, names, store.tmp, (tmp, nm, at, tot) -> {
+                    if (cancelled.get()) return false;
+                    String pid = base + "_" + (at + 1);
+                    try {
+                        PhotoStore.Result r = store.importOneFile(
+                                tmp, nm, pid, rollId, keepOriginal, displayPx, thumbPx, quality);
+                        slots[at] = r;
+                        cb.onOne(done.incrementAndGet(), total, r, null, null);
+                    } catch (Exception e) {
+                        Log.w(TAG, "压缩包导入失败: " + nm, e);
+                        failed.add(nm + "：" + e.getMessage());
+                        cb.onOne(done.incrementAndGet(), total, null, nm, String.valueOf(e.getMessage()));
+                    } finally {
+                        // keepOriginal 成功时 importOneFile 已经把临时文件改名进
+                        // originals/ 了，这次 delete 是无害的空操作；失败和取消
+                        // 的情况才真删
+                        if (tmp != null) tmp.delete();
+                    }
+                    return true;
+                });
+            } catch (Exception e) {
+                Log.w(TAG, "解压中断", e);
+                failed.add("解压中断：" + e.getMessage());
+            }
+            // 按 names 的顺序交出去，不是解压碰到的顺序
+            List<PhotoStore.Result> ordered = new ArrayList<>();
+            for (PhotoStore.Result r : slots) {
+                if (r != null) ordered.add(r);
+            }
+            cb.onFinished(ordered, failed, cancelled.get());
+        }, "zip-import").start();
     }
 
     private void run(final List<Uri> uris) {
