@@ -46,8 +46,12 @@ public class Importer {
         /** done 从 1 开始。失败时 r 为 null，用 failedName + error 描述。 */
         void onOne(int done, int total, PhotoStore.Result r, String failedName, String error);
         void onFinished(List<PhotoStore.Result> ok, List<String> failed, boolean cancelled);
-        /** 扫描压缩包时的进度。files 是已认出的图片数，total 未知。 */
-        void onScan(int files, long bytes);
+        /**
+         * 压缩包阶段进度。
+         * phase = "prepare" 时 done/total 是已拷贝字节数；
+         * phase = "scan" 时 done 是已认出的图片数、total 是 -1（未知）。
+         */
+        void onZipProgress(String phase, long done, long total);
         /** 扫描完了，把结果交给界面确认。error 非 null 就是不能导。 */
         void onZipScanned(ZipImporter.Scan s);
     }
@@ -66,9 +70,10 @@ public class Importer {
     private volatile ExecutorService pool;
     private final AtomicBoolean cancelled = new AtomicBoolean(false);
 
-    // 压缩包：选区之后要停在「等用户确认」这一步，所以 URI 和排好序的
-    // entry 名单得留着，等 startZip() 用
+    // 压缩包：选区之后要停在「等用户确认」这一步，所以拷好的临时文件、
+    // 原始 URI 和排好序的 entry 名单都得留着，等 startZip() 用
     private Uri pendingZipUri;
+    private File pendingZipFile;
     private List<String> pendingZipNames;
 
     public Importer(Activity act, PhotoStore store, Callback cb) {
@@ -163,6 +168,12 @@ public class Importer {
         }
     }
 
+    private static ZipImporter.Scan cancelledScan() {
+        ZipImporter.Scan s = new ZipImporter.Scan();
+        s.cancelled = true;
+        return s;
+    }
+
     private static ZipImporter.Scan zipPickFail(String msg) {
         ZipImporter.Scan s = new ZipImporter.Scan();
         s.error = msg;
@@ -195,7 +206,7 @@ public class Importer {
     /** 用户在确认弹窗里点了「开始导入」。 */
     public void startZip(String rollId, boolean keepOriginal,
                          int displayPx, int thumbPx, int quality) {
-        if (pendingZipUri == null || pendingZipNames == null || pendingZipNames.isEmpty()) {
+        if (pendingZipFile == null || pendingZipNames == null || pendingZipNames.isEmpty()) {
             cb.onFinished(Collections.emptyList(),
                     Collections.singletonList("压缩包已经不在了，重新选一次"), false);
             return;
@@ -259,24 +270,45 @@ public class Importer {
         }
         final Uri uri = data.getData();
         pendingZipUri = uri;
+        pendingZipFile = null;
         pendingZipNames = null;
 
         new Thread(() -> {
-            final long[] last = {0L};
-            ZipImporter.Scan s = ZipImporter.scan(act.getContentResolver(), uri,
-                    (files, bytes) -> {
-                        if (cancelled.get()) return false;
-                        // 两千个 entry 就是两千次回调，每次都过桥会把页面淹了
-                        long now = System.currentTimeMillis();
-                        if (now - last[0] < 120) return true;
-                        last[0] = now;
-                        cb.onScan(files, bytes);
-                        return true;
-                    });
-            // 中途被取消的话 names 只填了一半，不能留下来给 startZip 用
-            if (s.error == null && !s.cancelled) pendingZipNames = s.names;
-            cb.onZipScanned(s);
-        }, "zip-scan").start();
+            try {
+                // 先整个拷成真文件 —— ZipFile 要能 seek，content URI 给不了。
+                // 这一步同时也就把「源文件到底完整不完整」验了一遍。
+                final long[] last = {0L};
+                File archive = ZipImporter.stage(act.getContentResolver(), uri, store.tmp,
+                        (copied, total) -> {
+                            if (cancelled.get()) return false;
+                            long now = System.currentTimeMillis();
+                            if (now - last[0] < 120 && (total <= 0 || copied < total)) return true;
+                            last[0] = now;
+                            cb.onZipProgress("prepare", copied, total);
+                            return true;
+                        });
+                if (archive == null) {                 // 用户中止了拷贝
+                    cb.onZipScanned(cancelledScan());
+                    return;
+                }
+                pendingZipFile = archive;
+                cb.onZipProgress("scan", 0, -1);       // 读中央目录，基本是瞬间的
+                ZipImporter.Scan s = ZipImporter.scan(archive);
+                if (s.error != null) {
+                    // 这个包没用了，别占着几十上百 MB 的临时空间
+                    ZipImporter.deleteQuietly(archive);
+                    pendingZipFile = null;
+                } else {
+                    pendingZipNames = s.names;
+                }
+                cb.onZipScanned(s);
+            } catch (Exception e) {
+                Log.w(TAG, "准备压缩包失败", e);
+                ZipImporter.Scan s = new ZipImporter.Scan();
+                s.error = String.valueOf(e.getMessage());
+                cb.onZipScanned(s);
+            }
+        }, "zip-prepare").start();
     }
 
     /**
@@ -288,8 +320,7 @@ public class Importer {
      * 复杂一圈。第一版先串行 —— 进度条在走，几十秒是能接受的。
      */
     private void runZip(final List<String> names) {
-        final ContentResolver cr = act.getContentResolver();
-        final Uri uri = pendingZipUri;
+        final File archive = pendingZipFile;
         final int total = names.size();
         final AtomicInteger done = new AtomicInteger(0);
         final List<String> failed = new ArrayList<>();
@@ -301,7 +332,8 @@ public class Importer {
 
         new Thread(() -> {
             try {
-                ZipImporter.extract(cr, uri, names, store.tmp, (tmp, nm, at, tot) -> {
+                // 按 names 的顺序逐个取 —— ZipFile 能随机访问，不用顺着压缩包走
+                ZipImporter.extract(archive, names, store.tmp, (tmp, nm, at, tot) -> {
                     if (cancelled.get()) return false;
                     String pid = base + "_" + (at + 1);
                     try {
@@ -324,8 +356,13 @@ public class Importer {
             } catch (Exception e) {
                 Log.w(TAG, "解压中断", e);
                 failed.add("解压中断：" + e.getMessage());
+            } finally {
+                // 拷出来的那份包用完了就删，别占着几十上百 MB
+                ZipImporter.deleteQuietly(archive);
+                pendingZipFile = null;
+                pendingZipNames = null;
             }
-            // 按 names 的顺序交出去，不是解压碰到的顺序
+            // 按 names 的顺序交出去
             List<PhotoStore.Result> ordered = new ArrayList<>();
             for (PhotoStore.Result r : slots) {
                 if (r != null) ordered.add(r);

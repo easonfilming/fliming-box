@@ -1,10 +1,15 @@
 package com.filmbox.archive;
 
 import android.content.ContentResolver;
+import android.database.Cursor;
 import android.net.Uri;
+import android.provider.OpenableColumns;
+import android.util.Log;
 
 import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -12,24 +17,30 @@ import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.HashMap;
+import java.util.Enumeration;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipException;
-import java.util.zip.ZipInputStream;
+import java.util.zip.ZipFile;
 
 /**
  * 从 zip 压缩包里导入照片。
  *
- * 为什么是「先解到临时文件」而不是「读进 byte[]」：zip 的 entry 只能顺着读
- * 一次，而导入一张要读它三遍（量尺寸 / 读 EXIF / 解码）。读进 byte[] 的话一张
- * 80MB 的扫描件就要整份驻留内存，三线程并发能到几百 MB。先落成临时文件，
- * 内存恒定在 64KB 缓冲，而且下游走的是和相册导入完全一样的代码。
+ * 为什么**先整个拷成临时文件、再用 ZipFile**，而不是直接对 content:// 用
+ * ZipInputStream：
  *
- * 只认标准 zip（deflate / store）。rar、7z 会靠文件头认出来并给一句人话；
- * 加密 zip 读的时候会抛 ZipException，也转成同一类提示。这两件事都不引第三方库。
+ *   1. ZipInputStream 读不了「stored + 数据描述符」的条目 —— 不压缩的条目
+ *      尺寸未知时它划不出边界，直接抛
+ *      ZipException: only DEFLATED entries can have EXT descriptor。
+ *      而冲扫店发出来的包恰恰常常长这样（ZIP64 + stored + 描述符，一条不落）。
+ *   2. ZipFile 读的是中央目录，条目名和尺寸都是现成的：几十 GB 的包枚举
+ *      只要十几毫秒，不用解压一遍。ZipInputStream 要数体积只能整包解一遍。
+ *   3. ZipFile 支持 ZIP64，ZipInputStream 支持得残缺。
+ *   4. 条目可以按任意顺序取，不用顺着走第二遍。
+ *
+ * 代价是临时占一份包大小的磁盘（拷完就删，见 PhotoStore 启动时的清理）。
+ * content:// 给不了可 seek 的文件，这一步躲不掉。
  *
  * 不按压缩包里的文件名落地 —— 每张都重新编码成自己的编号文件，所以
  * ../ 之类的 entry 名（zip-slip）在这里结构上就无处可躲。
@@ -46,7 +57,7 @@ public class ZipImporter {
     /** 跟 PhotoStore.extensionOf 的白名单保持一致 —— 不一致的话
      *  keepOriginal 写出来的后缀会跟 doc.json 里记的对不上。 */
     private static final String[] IMG_EXT = {
-            "jpg", "jpeg", "png", "webp", "heic", "heif", "tif", "tiff", "bmp"
+            "jpg", "jpeg", "jpe", "jfif", "png", "webp", "heic", "heif", "tif", "tiff", "bmp"
     };
 
     // ---------------------------------------------------------------- 文件头
@@ -65,108 +76,173 @@ public class ZipImporter {
         return FMT_OTHER;
     }
 
+    private static String hex(byte[] b, int n) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < n; i++) {
+            if (i > 0) sb.append(' ');
+            sb.append(String.format("%02X", b[i]));
+        }
+        return sb.toString();
+    }
+
+    // ---------------------------------------------------------------- 拷贝
+
+    /** 拷贝进度。total <= 0 表示拿不到源文件大小。 */
+    public interface StageProgress {
+        /** 返回 false 表示用户中止了。 */
+        boolean onStage(long copied, long total);
+    }
+
+    /** 源文件在 content:// 那边报的大小，拿不到返回 -1。 */
+    public static long sourceSize(ContentResolver cr, Uri uri) {
+        try (Cursor c = cr.query(uri, null, null, null, null)) {
+            if (c != null && c.moveToFirst()) {
+                int i = c.getColumnIndex(OpenableColumns.SIZE);
+                if (i >= 0 && !c.isNull(i)) return c.getLong(i);
+            }
+        } catch (Exception ignored) {
+        }
+        return -1;
+    }
+
+    /**
+     * 把 content:// 拷成一个真文件。ZipFile 要能 seek，而 content URI 给的
+     * 是不可回退的流 —— 这一步躲不掉。
+     *
+     * @return 临时文件；中途被取消返回 null
+     */
+    public static File stage(ContentResolver cr, Uri uri, File tmpDir, StageProgress p)
+            throws IOException {
+        long total = sourceSize(cr, uri);
+        // 空间不够就别开始 —— 拷到一半失败，报错还不如不开始清楚
+        long free = tmpDir.getUsableSpace();
+        if (total > 0 && free > 0 && total + 16L * 1024 * 1024 > free) {
+            throw new IOException("剩余空间不够放下这个压缩包（要 " + (total >> 20)
+                    + " MB，只剩 " + (free >> 20) + " MB）");
+        }
+
+        File dst = new File(tmpDir, "zip_" + System.currentTimeMillis() + ".archive");
+        InputStream in = null;
+        OutputStream out = null;
+        try {
+            in = cr.openInputStream(uri);
+            if (in == null) throw new IOException("打不开这个文件");
+            out = new BufferedOutputStream(new FileOutputStream(dst), 64 * 1024);
+            byte[] buf = new byte[128 * 1024];
+            long done = 0;
+            int k;
+            while ((k = in.read(buf)) > 0) {
+                out.write(buf, 0, k);
+                done += k;
+                if (p != null && !p.onStage(done, total)) {
+                    closeQuietly(out);
+                    out = null;
+                    deleteQuietly(dst);
+                    return null;
+                }
+            }
+            closeQuietly(out);
+            out = null;
+            return dst;
+        } finally {
+            closeQuietly(in);
+            closeQuietly(out);
+        }
+    }
+
     // ---------------------------------------------------------------- 扫描
 
     /** 扫描结果。error 非 null 就是不能导，直接把它显示给用户。 */
     public static class Scan {
         /** 要导入的 entry 名，已过滤、已按自然序排好。 */
         public List<String> names = new ArrayList<>();
-        /** 解压后总字节。扫描时一个个数出来的，不是估算。 */
+        /** 解压后总字节。中央目录里现成的，不是估算。 */
         public long bytes;
         /** 跳过的非图片 entry 数（__MACOSX/、.DS_Store、说明.txt…）。 */
         public int skipped;
+        /** 压缩包里前几个 entry 的名字。一个图片都没认出来时用来说清楚里面是什么。 */
+        public List<String> seen = new ArrayList<>();
         public String error;
-        /** 用户在扫描过程中按了停止。 */
+        /** 用户在拷贝/扫描过程中按了停止。 */
         public boolean cancelled;
     }
 
-    /** 扫描进度。files 是已认出的图片数。返回 false 表示用户中止了。 */
-    public interface ScanProgress {
-        boolean onScan(int files, long bytes);
-    }
-
     /**
-     * 走一遍压缩包，数出有哪些图、解压后一共多大。
-     *
-     * 这一遍的代价是把整个包解压一次（只解不落盘），换来的是导入前那句
-     * 体积提示是**准的** —— 保留原片时它直接等于要占的磁盘。冲扫件是 JPEG，
-     * 本身已经压过了，压缩包的 SIZE 字段完全不能用来估解压后的大小。
+     * 读中央目录。几万个条目也只要几十毫秒 —— 尺寸是现成的，不用解压。
      */
-    public static Scan scan(ContentResolver cr, Uri uri, ScanProgress p) {
+    public static Scan scan(File archive) {
         Scan s = new Scan();
-        InputStream raw = null;
-        try {
-            raw = cr.openInputStream(uri);
-            if (raw == null) {
-                s.error = "打不开这个文件";
-                return s;
-            }
-            BufferedInputStream bin = new BufferedInputStream(raw, 64 * 1024);
-            bin.mark(16);
+
+        int fmt = FMT_OTHER;
+        try (InputStream in = new FileInputStream(archive)) {
             byte[] head = new byte[8];
             int got = 0;
             while (got < head.length) {
-                int k = bin.read(head, got, head.length - got);
+                int k = in.read(head, got, head.length - got);
                 if (k <= 0) break;
                 got += k;
             }
-            bin.reset();
-
-            int fmt = sniff(head);
+            fmt = sniff(head);
             if (fmt == FMT_RAR) { s.error = "这是个 rar 压缩包，暂时只能导 zip"; return s; }
             if (fmt == FMT_7Z)  { s.error = "这是个 7z 压缩包，暂时只能导 zip"; return s; }
-            if (fmt != FMT_ZIP) { s.error = "这不是一个 zip 压缩包"; return s; }
+            if (fmt != FMT_ZIP) {
+                s.error = "这不是一个 zip 压缩包（文件开头是 " + hex(head, got) + "）";
+                return s;
+            }
+        } catch (IOException e) {
+            s.error = "读不了这个文件：" + e.getMessage();
+            return s;
+        }
 
-            ZipInputStream zin = new ZipInputStream(bin);
-            byte[] buf = new byte[64 * 1024];
-            ZipEntry e;
-            while ((e = zin.getNextEntry()) != null) {
+        try (ZipFile zf = new ZipFile(archive)) {
+            Enumeration<? extends ZipEntry> en = zf.entries();
+            while (en.hasMoreElements()) {
+                ZipEntry e = en.nextElement();
                 if (e.isDirectory()) continue;
                 String nm = e.getName();
-                if (!isImageName(nm)) { s.skipped++; continue; }
-
+                if (!isImageName(nm)) {
+                    s.skipped++;
+                    if (s.seen.size() < 6) s.seen.add(baseName(nm));
+                    continue;
+                }
                 if (s.names.size() >= MAX_ENTRIES) {
                     s.error = "压缩包里的照片超过 " + MAX_ENTRIES + " 张，先分几个包再导";
                     return s;
                 }
-
-                // 读到底才知道真实大小 —— entry.getSize() 对流式压缩包经常是 -1
-                long len = 0;
-                int k;
-                while ((k = zin.read(buf)) > 0) len += k;
-                if (len <= 0) { s.skipped++; continue; }          // 空文件
+                long len = e.getSize();
+                if (len <= 0) { s.skipped++; continue; }              // 空文件
                 if (len > MAX_ENTRY_BYTES) {
                     s.error = baseName(nm) + " 单张超过 512MB，不像是扫描件";
                     return s;
                 }
                 s.names.add(nm);
                 s.bytes += len;
-                if (p != null && !p.onScan(s.names.size(), s.bytes)) {
-                    s.cancelled = true;
-                    return s;
-                }
             }
-
-            if (s.names.isEmpty()) {
-                s.error = s.skipped > 0
-                        ? "压缩包里没找到图片（跳过了 " + s.skipped + " 个文件）"
-                        : "压缩包是空的";
-                return s;
-            }
-            sortNatural(s.names);
-            return s;
-
         } catch (ZipException ze) {
-            // 加密的 entry 到这里就炸了：ZipInputStream 没有公开的加密标志位，
-            // 硬要说「加密」是猜的，所以把损坏也一起提
-            s.error = "压缩包读不出来 —— 可能加了密码，或者文件损坏了";
+            // 到这儿说明文件头是 PK 但中央目录读不出来：加密、损坏、或者分卷
+            s.error = "压缩包读不出来 —— 可能加了密码、是分卷包，或者文件损坏了";
             return s;
-        } catch (Exception ex) {
-            s.error = "读压缩包失败：" + ex.getMessage();
+        } catch (Exception e) {
+            s.error = "读压缩包失败：" + e.getMessage();
             return s;
-        } finally {
-            closeQuietly(raw);
         }
+
+        if (s.names.isEmpty()) {
+            if (s.skipped > 0) {
+                StringBuilder b = new StringBuilder("压缩包里没找到图片，里面是：");
+                for (int i = 0; i < s.seen.size(); i++) {
+                    if (i > 0) b.append('、');
+                    b.append(s.seen.get(i));
+                }
+                if (s.skipped > s.seen.size()) b.append(" 等 ").append(s.skipped).append(" 个文件");
+                s.error = b.toString();
+            } else {
+                s.error = "压缩包是空的";
+            }
+            return s;
+        }
+        sortNatural(s.names);
+        return s;
     }
 
     // ---------------------------------------------------------------- 解出
@@ -177,40 +253,31 @@ public class ZipImporter {
     }
 
     /**
-     * 照着 scanned 的顺序把 entry 逐个解到 tmpDir，交给 sink。
-     * 要再走一遍压缩包 —— ZipInputStream 是单向的，没法倒回去。
+     * 照着 wanted 的顺序逐个取出来 —— 这次是**按 wanted 走**，不是顺着
+     * 压缩包走。ZipFile 能随机访问，所以拿到的顺序天然就是排好的顺序。
      */
-    public static void extract(ContentResolver cr, Uri uri, List<String> wanted,
-                               File tmpDir, Sink sink) throws IOException {
-        Map<String, Integer> index = new HashMap<>();
-        for (int i = 0; i < wanted.size(); i++) index.put(wanted.get(i), i);
+    public static void extract(File archive, List<String> wanted, File tmpDir, Sink sink)
+            throws IOException {
         final int total = wanted.size();
+        try (ZipFile zf = new ZipFile(archive)) {
+            for (int i = 0; i < total; i++) {
+                String nm = wanted.get(i);
+                ZipEntry e = zf.getEntry(nm);
+                if (e == null) throw new IOException("压缩包里找不到 " + baseName(nm));
 
-        InputStream raw = null;
-        try {
-            raw = cr.openInputStream(uri);
-            if (raw == null) throw new IOException("打不开压缩包");
-            ZipInputStream zin = new ZipInputStream(new BufferedInputStream(raw, 64 * 1024));
-            byte[] buf = new byte[64 * 1024];
-            ZipEntry e;
-            while ((e = zin.getNextEntry()) != null) {
-                if (e.isDirectory()) continue;
-                String nm = e.getName();
-                Integer at = index.get(nm);
-                if (at == null) continue;
-
-                File tmp = new File(tmpDir, "zip_" + at + "_" + System.nanoTime() + ".part");
-                try (OutputStream out = new FileOutputStream(tmp)) {
+                File tmp = new File(tmpDir, "zip_" + i + "_" + System.nanoTime() + ".part");
+                try (InputStream in = zf.getInputStream(e);
+                     OutputStream out = new BufferedOutputStream(
+                             new FileOutputStream(tmp), 64 * 1024)) {
+                    byte[] buf = new byte[128 * 1024];
                     int k;
-                    while ((k = zin.read(buf)) > 0) out.write(buf, 0, k);
+                    while ((k = in.read(buf)) > 0) out.write(buf, 0, k);
                 }
-                if (!sink.onEntry(tmp, baseName(nm), at, total)) {
+                if (!sink.onEntry(tmp, baseName(nm), i, total)) {
                     deleteQuietly(tmp);
                     return;
                 }
             }
-        } finally {
-            closeQuietly(raw);
         }
     }
 
@@ -233,6 +300,8 @@ public class ZipImporter {
         int dot = base.lastIndexOf('.');
         if (dot < 0 || dot == base.length() - 1) return false;
         String ext = base.substring(dot + 1);
+        // 后缀上可能粘着空格或换行（有些工具会写脏），去掉再比
+        ext = ext.trim();
         for (String x : IMG_EXT) if (x.equals(ext)) return true;
         return false;
     }
@@ -278,11 +347,11 @@ public class ZipImporter {
         return s.substring(i);
     }
 
-    private static void closeQuietly(InputStream in) {
-        if (in != null) try { in.close(); } catch (IOException ignored) {}
+    static void closeQuietly(java.io.Closeable c) {
+        if (c != null) try { c.close(); } catch (IOException ignored) {}
     }
 
-    private static void deleteQuietly(File f) {
+    static void deleteQuietly(File f) {
         if (f != null) try { f.delete(); } catch (SecurityException ignored) {}
     }
 }

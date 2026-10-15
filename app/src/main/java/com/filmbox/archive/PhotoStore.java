@@ -51,7 +51,7 @@ public class PhotoStore {
         tmp.mkdirs();
         // 压缩包导入中途被杀掉会留下 zip_*.part，启动时清一次。
         // 构造函数在 onStart 里跑，那时不可能有导入在进行，安全。
-        File[] stale = tmp.listFiles((d, nm) -> nm.startsWith("zip_") && nm.endsWith(".part"));
+        File[] stale = tmp.listFiles((d, nm) -> nm.startsWith("zip_"));
         if (stale != null) for (File f : stale) f.delete();
     }
 

@@ -1251,6 +1251,8 @@ h1{
   font-variant-numeric:tabular-nums;
 }
 .stockstats>div.warn .v{color:var(--rust)}
+/* 相机仓库那排要放金额，21px 的等宽放不下「¥19,800」 */
+.stockstats.money .v{font-size:15px;line-height:1.25}
 .stockstats>div.cold .v{color:var(--cold)}
 .sorthint{
   margin:0 18px 12px;
@@ -1382,6 +1384,8 @@ h1{
   font-variant-numeric:tabular-nums;
 }
 .gearmeta .lb-n.done{color:var(--am)}
+.gearmeta .lb-n.pl-up{color:var(--sage)}
+.gearmeta .lb-n.pl-down{color:var(--rust)}
 
 /* 机身详情里的状态面板 */
 .loadpanel{
@@ -1433,6 +1437,61 @@ h1{
 .lp-acts{display:grid;grid-template-columns:1.5fr 1fr 1fr;gap:8px;margin-top:13px}
 .lp-acts .btn{padding:9px 6px;font-size:12px;gap:5px}
 .lp-acts .btn svg{width:13px;height:13px}
+
+/* ---------- 器材的购入 / 出售 ---------- */
+.acqband{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  margin-top:8px;
+}
+.acq-span{
+  flex:1;
+  min-width:0;
+  font-size:10.5px;
+  color:var(--tx3);
+  font-variant-numeric:tabular-nums;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.acq-pl{
+  flex:0 0 auto;
+  font-family:"Space Mono", monospace;
+  font-size:10.5px;
+  font-variant-numeric:tabular-nums;
+}
+.acq-pl.up{color:var(--sage)}
+.acq-pl.down{color:var(--rust)}
+.acq-chip{
+  flex:0 0 auto;
+  font-size:9.5px;
+  padding:2px 6px;
+  border-radius:3px;
+  border:1px solid var(--bd2);
+  color:var(--tx3);
+  white-space:nowrap;
+}
+/* 详情里的那一行汇总：陪伴多久 · 盈亏多少 */
+.acqsummary{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  flex-wrap:wrap;
+  margin-top:11px;
+  padding-top:11px;
+  border-top:1px dashed var(--bd);
+  font-size:11.5px;
+  color:var(--tx3);
+}
+.acqsummary b{
+  font-family:"Space Mono", monospace;
+  font-weight:400;
+  color:var(--tx);
+  font-variant-numeric:tabular-nums;
+}
+.acqsummary b.up{color:var(--sage)}
+.acqsummary b.down{color:var(--rust)}
 
 /* ============================================================
    SHEETS
@@ -2740,13 +2799,16 @@ var SAMPLE_ROLLS = [
 
 var SAMPLE_GEAR = [
   {id:'g1', kind:'body', name:'Nikon FM2', sub:'F 卡口 · 1989', rolls:14, ill:'slr',
+    acq:{buy:'2023-11-08', buyPrice:4800},
     load:{film:'KODAK PORTRA 400', spec:'135', iso:400, total:36, shot:23, since:'2026-08-30'}},
-  {id:'g2', kind:'body', name:'Leica M6 Classic', sub:'M 卡口 · 1992', rolls:9, ill:'rf'},
+  {id:'g2', kind:'body', name:'Leica M6 Classic', sub:'M 卡口 · 1992', rolls:9, ill:'rf',
+    acq:{buy:'2021-06-20', buyPrice:19800, sell:'2026-05-04', sellPrice:25600}},
   {id:'g3', kind:'body', name:'Mamiya RB67 Pro SD', sub:'中画幅 6×7 · 1990', rolls:5, ill:'slr',
     load:{film:'ILFORD HP5 PLUS', spec:'120', iso:400, total:10, shot:10, since:'2026-09-02'}},
   {id:'g4', kind:'body', name:'Rolleiflex 3.5F', sub:'双反 6×6 · 1960', rolls:3, ill:'tlr'},
   {id:'g5', kind:'body', name:'海鸥 4B', sub:'双反 6×6 · 1972', rolls:2, ill:'tlr'},
-  {id:'g6', kind:'lens', name:'Nikkor 50mm f/1.4 AI-S', sub:'F 卡口 · 1981', rolls:12, ill:'lens'},
+  {id:'g6', kind:'lens', name:'Nikkor 50mm f/1.4 AI-S', sub:'F 卡口 · 1981', rolls:12, ill:'lens',
+    acq:{buy:'2022-02-14', buyPrice:900, sell:'2024-09-30', sellPrice:750}},
   {id:'g7', kind:'lens', name:'Summicron 35mm f/2', sub:'M 卡口 · 1980', rolls:9, ill:'lens'},
   {id:'g8', kind:'lens', name:'Sekor 90mm f/3.8', sub:'RB 卡口 · 1974', rolls:5, ill:'lens'},
   {id:'g9', kind:'lens', name:'Nikkor 105mm f/2.5', sub:'F 卡口 · 1971', rolls:4, ill:'lens'}
@@ -3507,6 +3569,117 @@ function loadSpecChips(sp){
   return cur;
 }
 
+/* ============================================================
+   器材的购入 / 出售
+   ============================================================
+   g.acq = { buy:'2024-03-15', buyPrice:3200, sell:'2026-05-01', sellPrice:2800 }
+   四个字段都可空 —— 只记购入、只记价格、什么都不记，都很正常。
+   没卖出去的（acq.sell 为空）就是还在手上。
+   ============================================================ */
+
+function acqOf(g){ return (g && g.acq) ? g.acq : null; }
+
+/** 这四个框里但凡填了一样，卡片上就值得显示一行。 */
+function hasAcq(g){
+  var a = acqOf(g);
+  return !!(a && (a.buy || a.buyPrice != null || a.sell || a.sellPrice != null));
+}
+
+/** 金额。手写千位分隔，不用正则 —— 这个文件是脚本生成的，
+ *  正则里的反斜杠过一遍 Python 字符串很容易被吃掉。 */
+function fmtMoney(n){
+  var neg = n < 0;
+  var s = Math.round(Math.abs(n)).toString();
+  var out = '', c = 0;
+  for (var i = s.length - 1; i >= 0; i--) {
+    out = s.charAt(i) + out;
+    if (++c % 3 === 0 && i > 0) out = ',' + out;
+  }
+  return (neg ? '-' : '') + '¥' + out;
+}
+function fmtMoneySigned(n){ return (n > 0 ? '+' : '') + fmtMoney(n); }
+
+/** 天数 → 人话。不满一个月说天，不满一年说月，再往上「N 年 M 个月」。 */
+function fmtSpan(months, days){
+  if (months < 1) return days + ' 天';
+  if (months < 12) return months + ' 个月';
+  var y = Math.floor(months / 12), m = months % 12;
+  return y + ' 年' + (m ? ' ' + m + ' 个月' : '');
+}
+
+/** 陪伴了多久。卖掉就算到出售那天，还在手上就算到今天。
+ *  没有购入日期就没法算，返回 null。 */
+function held(g){
+  var a = acqOf(g);
+  if (!a || !a.buy) return null;
+  var p = a.buy.split('-');
+  if (p.length !== 3) return null;
+  var d0 = new Date(+p[0], +p[1] - 1, +p[2]);
+  var d1 = new Date();
+  if (a.sell) {
+    var q = a.sell.split('-');
+    if (q.length === 3) d1 = new Date(+q[0], +q[1] - 1, +q[2]);
+  }
+  if (isNaN(d0.getTime()) || isNaN(d1.getTime()) || d1 < d0) return null;
+  var days = Math.floor((d1 - d0) / 86400000);
+  var months = (d1.getFullYear() - d0.getFullYear()) * 12 + (d1.getMonth() - d0.getMonth());
+  if (d1.getDate() < d0.getDate()) months -= 1;      // 还没满这个月
+  if (months < 0) months = 0;
+  return { days: days, months: months, text: fmtSpan(months, days), sold: !!a.sell };
+}
+
+/** 已实现的盈亏。买入价和卖出价都有才算得出来 —— 只有一边的话那不是
+ *  盈亏，那只是花掉的钱或者收回的钱。 */
+function realizedPL(g){
+  var a = acqOf(g);
+  if (!a || a.buyPrice == null || a.sellPrice == null) return null;
+  return a.sellPrice - a.buyPrice;
+}
+
+/** 相机仓库顶上那排统计。一台都没记价格时整排不显示 —— 一排 0 只是噪音。 */
+function gearStats(){
+  var owned = 0, sold = 0, spend = 0, pl = 0, anyPrice = false, anyPL = false;
+  GEAR.forEach(function(g){
+    var a = acqOf(g) || {};
+    if (a.sell) sold++; else owned++;
+    if (a.buyPrice != null) { spend += a.buyPrice; anyPrice = true; }
+    if (a.sellPrice != null) anyPrice = true;
+    var p = realizedPL(g);
+    if (p != null) { pl += p; anyPL = true; }
+  });
+  return { owned: owned, sold: sold, spend: spend, pl: pl,
+           anyPrice: anyPrice, anyPL: anyPL };
+}
+
+/** 从详情弹窗里读那四个框。切类型会重画这一屏，所以取值、回填、保存
+ *  必须走同一份数据 —— 读 DOM 只在这一处。 */
+function acqFromDOM(){
+  function v(id){ var el = document.getElementById(id); return el ? el.value : null; }
+  var bd = v('gBuyDate'), bp = v('gBuyPrice'), sd = v('gSellDate'), sp = v('gSellPrice');
+  if (bd === null && bp === null) return null;       // 弹窗里压根没有这几个框
+  return {
+    buy: bd || '',
+    buyPrice: numOrNull(bp),
+    sell: sd || '',
+    sellPrice: numOrNull(sp)
+  };
+}
+
+/** 金额输入框 → 数字。空着就是「没记」，不是 0 —— 0 元和没记是两回事。 */
+function numOrNull(s){
+  var t = String(s == null ? '' : s).replace(/[^0-9.]/g, '');
+  if (!t) return null;
+  var v = parseFloat(t);
+  return isNaN(v) ? null : v;
+}
+
+/** 四个字段全空就把 acq 删掉，别在 doc.json 里留一堆空壳。 */
+function acqTrim(g){
+  var a = acqOf(g);
+  if (!a) return;
+  if (!a.buy && a.buyPrice == null && !a.sell && a.sellPrice == null) delete g.acq;
+}
+
 function viewGear(){
   var list = GEAR.filter(function(g){ return state.gearKind === 'all' || g.kind === state.gearKind; });
   var bodies = GEAR.filter(function(g){ return g.kind === 'body'; }).length;
@@ -3515,6 +3688,12 @@ function viewGear(){
   var cards = list.map(function(g){
     var L = gearLoad(g);
     var done = loadDone(L);
+    // meta 行右边只放「装了胶卷的张数」—— 盈亏放到下面那行去，
+    // 不然一台又装着胶卷又记了价格的机器，盈亏就被挤掉了
+    var pl = realizedPL(g);
+    var right = L ? '<span class="lb-n' + (done ? ' done' : '') + '">' +
+                      L.shot + '/' + L.total + '</span>' : '';
+    var hd = hasAcq(g) ? held(g) : null;
     return '<button class="gearcard" data-act="gear" data-id="' + g.id + '">' +
       '<span class="gearshot">' + gearImage(g) +
         (g.photo ? '<span class="cutbadge">' + I.check + '照片</span>' : '') +
@@ -3524,17 +3703,36 @@ function viewGear(){
         '<span class="gearsub" style="display:block">' + esc(g.sub) + '</span>' +
         '<span class="gearmeta">' +
           '<span class="kind">' + (g.kind === 'body' ? '机身' : '镜头') + '</span>' +
-          (L ? '<span class="lb-n' + (done ? ' done' : '') + '">' +
-                 L.shot + '/' + L.total + '</span>' : '') +
+          right +
         '</span>' +
         (L ? '<span class="loadband">' +
                '<span class="lb-film">' + esc(L.film) + '</span>' +
                '<span class="lb-bar' + (done ? ' done' : '') + '">' +
                  '<i style="width:' + loadPct(L) + '%"></i></span>' +
              '</span>' : '') +
+        (hasAcq(g) ? '<span class="acqband">' +
+               (hd ? '<span class="acq-span">陪伴 ' + hd.text + '</span>' : '<span class="acq-span"></span>') +
+               ((acqOf(g).sell || acqOf(g).sellPrice != null)
+                  ? '<span class="acq-chip">已出</span>' : '') +
+               (pl != null ? '<span class="acq-pl ' + (pl >= 0 ? 'up' : 'down') + '">' +
+                   fmtMoneySigned(pl) + '</span>' : '') +
+             '</span>' : '') +
       '</span>' +
     '</button>';
   }).join('');
+
+  var st = gearStats();
+  // 一台都没记过价格就不显示这排 —— 四个 0 只是噪音
+  var stats = st.anyPrice
+    ? '<div class="stockstats money">' +
+        '<div><div class="k">在册设备</div><div class="v">' + st.owned + '</div></div>' +
+        '<div><div class="k">累计投入</div><div class="v">' + fmtMoney(st.spend) + '</div></div>' +
+        '<div><div class="k">已出售</div><div class="v">' + st.sold + '</div></div>' +
+        '<div class="' + (st.anyPL ? (st.pl >= 0 ? '' : 'warn') : '') + '">' +
+          '<div class="k">盈亏</div><div class="v">' +
+          (st.anyPL ? fmtMoneySigned(st.pl) : '—') + '</div></div>' +
+      '</div>'
+    : '';
 
   return '<div class="hd"><div><h2>相机仓库</h2>' +
       '<div class="sub">' + bodies + ' 机身 · ' + lenses + ' 镜头' +
@@ -3548,6 +3746,7 @@ function viewGear(){
         '<button data-act="gearkind" data-k="lens" aria-pressed="' + (state.gearKind === 'lens') + '">镜头</button>' +
       '</div>' +
     '</div>' +
+    stats +
     (GEAR.length
       ? '<div class="geargrid">' + cards + '</div>'
       : emptyState('还没有登记设备', [
@@ -4190,14 +4389,26 @@ function sheetZipConfirm(rollId){
 function sheetImporting(){
   var p = state.importProgress || { done: 0, total: 0 };
 
-  // 读压缩包这一段张数还不知道，画不了进度条 —— 但数字在动，
-  // 总比一个「正在导入 0/0」看着像卡死强
+  // 压缩包要先整个拷一份（ZipFile 得能 seek），这一段字节总数是知道的，
+  // 画真进度条
+  if (p.phase === 'prepare') {
+    var pp = p.total ? Math.round(p.done / p.total * 100) : 0;
+    return '<div class="grab"></div>' +
+      '<h3>正在准备压缩包</h3>' +
+      '<p class="sh-sub">' +
+        (p.total > 0 ? '已读 ' + fmtBytes(p.done) + ' / ' + fmtBytes(p.total)
+                     : '已读 ' + fmtBytes(p.done)) +
+        ' —— 要先把整包拿过来才能翻目录。</p>' +
+      '<div class="urgbar s" style="height:6px;margin-top:4px"><i style="width:' + pp + '%"></i></div>' +
+      '<div class="sheet-actions single" style="margin-top:22px">' +
+        '<button class="btn ghost" data-act="importCancel">停止</button>' +
+      '</div>';
+  }
+
   if (p.phase === 'scan') {
     return '<div class="grab"></div>' +
       '<h3>正在读取压缩包</h3>' +
-      '<p class="sh-sub">已认出 ' + (p.files || 0) + ' 张' +
-        (p.bytes ? ' · 解压后约 ' + fmtBytes(p.bytes) : '') +
-        ' —— 整包要先数一遍，才知道它到底有多大。</p>' +
+      '<p class="sh-sub">正在翻目录…</p>' +
       '<div class="sheet-actions single" style="margin-top:22px">' +
         '<button class="btn ghost" data-act="importCancel">停止</button>' +
       '</div>';
@@ -4217,9 +4428,12 @@ function sheetImporting(){
 window.__bridge.onImportProgress = function(json){
   var o;
   try { o = JSON.parse(json); } catch(e){ return; }
-  state.importProgress = (o.phase === 'scan')
-    ? { phase:'scan', files:o.files || 0, bytes:o.bytes || 0 }
-    : { phase:'decode', done:o.done || 0, total:o.total || 0 };
+  state.importProgress = {
+    phase: o.phase || 'decode',
+    done:  o.done  || 0,
+    total: (o.total == null ? 0 : o.total),
+    files: o.files || 0
+  };
   if (o.error) Native.log('warn', '导入失败 ' + (o.failedName || '') + '：' + o.error);
   if (state.sheet === 'importing') renderSheet();
 };
@@ -5148,6 +5362,61 @@ function sheetLoadDrop(id){
     '</div>';
 }
 
+/** 详情里的「购入 / 出售」一节。四个框 + 一行算出来的陪伴时长和盈亏。 */
+function acqSection(g, sg){
+  // 切类型会重画这一屏，所以优先用 sheetArg 里那份（含用户刚敲进去的）
+  var a = (sg && sg.acq) ? sg.acq : (acqOf(g) || {});
+  function money(v){ return (v == null) ? '' : String(v); }
+
+  return '<div class="field">' +
+    '<label>购入 / 出售</label>' +
+    '<div class="fieldrow">' +
+      '<div class="field" style="margin-bottom:0"><label for="gBuyDate" ' +
+        'style="font-size:10.5px">购入时间</label>' +
+        '<input type="date" id="gBuyDate" value="' + esc(a.buy || '') + '"></div>' +
+      '<div class="field" style="margin-bottom:0"><label for="gBuyPrice" ' +
+        'style="font-size:10.5px">购入价格</label>' +
+        '<input type="text" id="gBuyPrice" inputmode="decimal" value="' + esc(money(a.buyPrice)) +
+        '" placeholder="元"></div>' +
+    '</div>' +
+    '<div class="fieldrow" style="margin-top:11px">' +
+      '<div class="field" style="margin-bottom:0"><label for="gSellDate" ' +
+        'style="font-size:10.5px">出售时间</label>' +
+        '<input type="date" id="gSellDate" value="' + esc(a.sell || '') + '"></div>' +
+      '<div class="field" style="margin-bottom:0"><label for="gSellPrice" ' +
+        'style="font-size:10.5px">出售价格</label>' +
+        '<input type="text" id="gSellPrice" inputmode="decimal" value="' + esc(money(a.sellPrice)) +
+        '" placeholder="元"></div>' +
+    '</div>' +
+    '<div class="acqsummary" id="gAcqSum">' + acqSummaryHTML(a) + '</div>' +
+  '</div>';
+}
+
+/**
+ * 那一行汇总：陪伴多久 · 盈亏多少。
+ * 单独抽出来是因为四个框一边敲就要一边重算（见 input 监听）——
+ * 敲完还得先保存才看得到结果的话，这个功能就不好用了。
+ */
+function acqSummaryHTML(a){
+  a = a || {};
+  var hd = held({ acq: a });
+  var pl = (a.buyPrice != null && a.sellPrice != null) ? (a.sellPrice - a.buyPrice) : null;
+  var line = '';
+  if (hd) {
+    line += '<span>' + (hd.sold ? '陪伴' : '已陪伴') + ' <b>' + hd.text + '</b></span>';
+  }
+  if (pl != null) {
+    line += '<span>盈亏 <b class="' + (pl >= 0 ? 'up' : 'down') + '">' +
+            fmtMoneySigned(pl) + '</b></span>';
+  } else if (a.buyPrice != null) {
+    line += '<span>投入 <b>' + fmtMoney(a.buyPrice) + '</b></span>';
+  }
+  if (!line) {
+    line = '<span>填上日期和价格，这里会算出陪伴了多久、盈亏多少。</span>';
+  }
+  return line;
+}
+
 function sheetGear(id){
   var g = null;
   GEAR.forEach(function(x){ if(x.id === id) g = x; });
@@ -5197,6 +5466,8 @@ function sheetGear(id){
       '<label for="gmSub">卡口 / 规格</label>' +
       '<input type="text" id="gmSub" value="' + esc(sb) + '" placeholder="例如 F 卡口 · 1989">' +
     '</div>' +
+
+    acqSection(g, sg) +
 
     '<div class="sheet-actions">' +
       '<button class="btn ghost" data-act="gearDelete" data-id="' + g.id + '">删除设备</button>' +
@@ -5596,7 +5867,7 @@ document.getElementById('phone').addEventListener('click', function(e){
     case 'importZipPick':
       // 立刻切到进度弹窗：选完压缩包原生要整包扫一遍，不先切的话
       // 那几十秒里界面一声不吭，看着就是卡住了
-      state.importProgress = { phase:'scan', files:0, bytes:0 };
+      state.importProgress = { phase:'prepare', done:0, total:0 };
       state.sheet = 'importing';
       state.sheetArg = { roll: d.roll };
       renderSheet();
@@ -5707,6 +5978,8 @@ document.getElementById('phone').addEventListener('click', function(e){
         var se = document.getElementById('gmSub');
         if (ne) state.sheetArg.name = ne.value;
         if (se) state.sheetArg.sub  = se.value;
+        var aq = acqFromDOM();                 // 价格和日期同样不能被重画冲掉
+        if (aq) state.sheetArg.acq = aq;
       })();
       renderSheet();
       break;
@@ -5841,6 +6114,12 @@ document.getElementById('phone').addEventListener('click', function(e){
       if (state.sheetArg && state.sheetArg.kind) gg.kind = state.sheetArg.kind;
       // 改成镜头了，胶卷仓就不存在了 —— 留着会在列表里显示成一台装着胶卷的镜头
       if (gg.kind !== 'body') gg.load = null;
+
+      var aq = acqFromDOM();
+      if (aq) {
+        gg.acq = aq;
+        acqTrim(gg);            // 四个框全空就把 acq 删掉，不留空壳
+      }
       saveDoc();
       closeSheet();
       render(true);
@@ -6120,6 +6399,13 @@ document.getElementById('phone').addEventListener('input', function(e){
     [].forEach.call(w.children, function(b){
       b.setAttribute('aria-pressed', parseInt(b.getAttribute('data-v'), 10) === cur);
     });
+    return;
+  }
+  // 购入/出售那四个框：一边敲一边把「陪伴多久、盈亏多少」算出来
+  if (el.id === 'gBuyPrice' || el.id === 'gSellPrice' ||
+      el.id === 'gBuyDate'  || el.id === 'gSellDate') {
+    var box = document.getElementById('gAcqSum');
+    if (box) box.innerHTML = acqSummaryHTML(acqFromDOM() || {});
   }
 });
 

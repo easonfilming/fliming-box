@@ -494,12 +494,12 @@ public class Bridge implements Importer.Callback, Capture.Callback {
     }
 
     @Override
-    public void onScan(int files, long bytes) {
+    public void onZipProgress(String phase, long done, long total) {
         JSONObject o = new JSONObject();
         try {
-            o.put("phase", "scan");
-            o.put("files", files);
-            o.put("bytes", bytes);
+            o.put("phase", phase);
+            o.put("done", done);
+            o.put("total", total);
         } catch (JSONException ignored) {}
         call("onImportProgress", o.toString());
     }
